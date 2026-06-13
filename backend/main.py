@@ -30,7 +30,10 @@ Base.metadata.create_all(bind=engine)
 # Dynamic DB Migration for last_sos_time column
 try:
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE users ADD COLUMN last_sos_time DATETIME"))
+        if "sqlite" in str(engine.url):
+            conn.execute(text("ALTER TABLE users ADD COLUMN last_sos_time DATETIME"))
+        else:
+            conn.execute(text("ALTER TABLE users ADD COLUMN last_sos_time TIMESTAMP"))
 except Exception:
     pass
 
