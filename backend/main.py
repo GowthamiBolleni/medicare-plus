@@ -110,8 +110,12 @@ app.add_middleware(
 )
 from fastapi.staticfiles import StaticFiles
 
+# Ensure uploads static directory exists
+uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+
 # Mount uploads static directory
-app.mount("/uploads", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "uploads")), name="uploads")
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # Seed initial data for Gowthami (User id=1) if not exists
 @app.on_event("startup")
