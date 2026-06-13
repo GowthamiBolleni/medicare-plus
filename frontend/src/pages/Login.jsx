@@ -62,7 +62,8 @@ export default function Login({ onLoginSuccess }) {
         setConfirmPassword("");
       } catch (err) {
         console.error("Registration failure", err);
-        setError("Failed to create account. Username/Email might be taken.");
+        const errMsg = err.response?.data?.detail || "Failed to create account. Username/Email might be taken.";
+        setError(errMsg);
       } finally {
         setLoading(false);
       }
@@ -73,7 +74,8 @@ export default function Login({ onLoginSuccess }) {
         onLoginSuccess();
       } catch (err) {
         console.error("Login failure", err);
-        setError("Invalid username or password. Please try again.");
+        const errMsg = err.response?.data?.detail || "Invalid username or password. Please try again.";
+        setError(errMsg);
       } finally {
         setLoading(false);
       }
