@@ -276,19 +276,7 @@ export default function Login({ onLoginSuccess }) {
           </button>
         </div>
 
-        {/* Demo Information */}
-        {!isSignUp && (
-          <div className="border-t border-slate-100 pt-4 text-center space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Quick Access Demo Credentials
-            </p>
-            <div className="text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-100 p-2.5 rounded-xl max-w-xs mx-auto flex items-center justify-around">
-              <span>User: <strong className="text-slate-700">testuser1</strong></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
-              <span>Pass: <strong className="text-slate-700">testpassword</strong></span>
-            </div>
-          </div>
-        )}
+
 
       </div>
     </div>
