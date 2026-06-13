@@ -16,3 +16,4 @@ twilio
 requests
 apscheduler
 google-generativeai
+email-validator
