@@ -99,7 +99,9 @@ env = os.getenv("ENV", "development")
 if env == "production":
     origins = [
         "http://localhost:3000",
-        "https://yourdomain.com"
+        "http://localhost:5173",
+        "https://medicare-plus-sigma.vercel.app",
+        "https://medicare-plus-frontend.vercel.app"
     ]
 else:
     origins = ["*"]
