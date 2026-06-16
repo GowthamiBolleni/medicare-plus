@@ -326,7 +326,7 @@ def calculate_health_score_trend(user_id: int, db: Session):
         return {"this_week": 85, "last_week": 80, "change": 5, "text": "Last Week: 80 | This Week: 85 | ↑ Improved by 5 points"}
         
     if not metrics:
-        return {"this_week": 82, "last_week": 78, "change": 4, "text": "Last Week: 78 | This Week: 82 | ↑ Improved by 4 points"}
+        return {"this_week": 0, "last_week": 0, "change": 0, "text": "No vitals logged yet"}
         
     latest = metrics[0]
     this_week = calculate_metric_score(latest)

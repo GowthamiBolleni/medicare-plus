@@ -1,18 +1,41 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Bell, Settings, Menu, X, Check } from "lucide-react";
+import { notificationsAPI } from "../api";
 
-export default function Header({ toggleMobileMenu, notifications = [], profile }) {
+export default function Header({ toggleMobileMenu, profile }) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const [alerts, setAlerts] = useState(
-    notifications.length > 0 ? notifications : [
-      { id: 1, text: "Medicine reminder for Vitamin D3", time: "12:00 PM", read: false },
-      { id: 2, text: "Appointment reminder for Dr. Sharma", time: "Today", read: false }
-    ]
-  );
+  const [alerts, setAlerts] = useState([]);
 
-  const markAllRead = () => {
-    setAlerts(alerts.map(a => ({ ...a, read: true })));
+  const loadNotifications = async () => {
+    try {
+      const res = await notificationsAPI.getAll();
+      const formatted = res.map(n => ({
+        id: n.id,
+        text: n.message,
+        time: n.created_at ? new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "Today",
+        read: n.read
+      }));
+      setAlerts(formatted);
+    } catch (e) {
+      console.error("Failed to load notifications in Header:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const markAllRead = async () => {
+    try {
+      const unreadAlerts = alerts.filter(a => !a.read);
+      await Promise.all(unreadAlerts.map(a => notificationsAPI.markRead(a.id)));
+      setAlerts(alerts.map(a => ({ ...a, read: true })));
+    } catch (e) {
+      console.error("Failed to mark all read:", e);
+    }
   };
 
   const unreadCount = alerts.filter(a => !a.read).length;
