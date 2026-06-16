@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Any
 import datetime
 
 # Token schemas
@@ -78,7 +78,7 @@ class AppointmentBase(BaseModel):
     hospital: str
     doctor: str
     specialty: Optional[str] = None
-    date: datetime.datetime
+    date: Any
     time: str
     status: Optional[str] = "Upcoming"
     description: Optional[str] = None
@@ -90,7 +90,7 @@ class AppointmentUpdate(BaseModel):
     hospital: Optional[str] = None
     doctor: Optional[str] = None
     specialty: Optional[str] = None
-    date: Optional[datetime.datetime] = None
+    date: Optional[Any] = None
     time: Optional[str] = None
     status: Optional[str] = None
     description: Optional[str] = None
