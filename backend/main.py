@@ -347,6 +347,33 @@ def calculate_health_score_trend(user_id: int, db: Session):
         
     return {"this_week": this_week, "last_week": last_week, "change": change, "text": text}
 
+@app.get("/api/debug-db")
+def debug_db():
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        return {"status": "error", "message": "DATABASE_URL environment variable is not set"}
+    
+    import re
+    # Mask password for security
+    masked_url = re.sub(r":([^@]+)@", ":[MASKED_PASSWORD]@", db_url)
+    
+    try:
+        from sqlalchemy import create_engine, text
+        temp_engine = create_engine(db_url)
+        with temp_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {
+            "status": "success",
+            "message": "Connected to database successfully!",
+            "database_url": masked_url
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "database_url": masked_url
+        }
+
 # ================= AUTHENTICATION =================
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse)
