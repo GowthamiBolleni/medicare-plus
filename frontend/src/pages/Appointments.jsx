@@ -18,6 +18,8 @@ export default function Appointments() {
     description: "",
   });
 
+  const [submitting, setSubmitting] = useState(false);
+
   const doctorsList = [
     { name: "Dr. Sharma", specialty: "Cardiologist", hospital: "Apollo Hospital" },
     { name: "Dr. Mehta", specialty: "Neurologist", hospital: "City Hospital" },
@@ -42,7 +44,9 @@ export default function Appointments() {
 
   const handleBookAppointment = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     try {
+      setSubmitting(true);
       // Find matching doctor specialty and hospital details
       const doc = doctorsList.find((d) => d.name === newAppt.doctor) || doctorsList[0];
       const payload = {
@@ -63,6 +67,9 @@ export default function Appointments() {
       });
     } catch (err) {
       console.error("Error booking appointment", err);
+      alert(err.response?.data?.detail || "Failed to book appointment. You may already have scheduled an appointment at this time.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -313,9 +320,12 @@ export default function Appointments() {
 
               <button
                 type="submit"
-                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans"
+                disabled={submitting}
+                className={`w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans ${
+                  submitting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               >
-                Confirm Appointment
+                {submitting ? "Confirming..." : "Confirm Appointment"}
               </button>
             </form>
           </div>

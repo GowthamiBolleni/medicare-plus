@@ -933,6 +933,20 @@ def book_appointment(appt: schemas.AppointmentCreate, current_user: models.User 
     else:
         display_name = f"Dr. {doctor_name}"
 
+    # Check for duplicate appointment (same doctor, date, time, and user)
+    existing = db.query(models.Appointment).filter(
+        models.Appointment.user_id == current_user.id,
+        models.Appointment.doctor == display_name,
+        models.Appointment.date == appt.date,
+        models.Appointment.time == appt.time,
+        models.Appointment.status == "Upcoming"
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have an appointment scheduled with this doctor at this time."
+        )
+
     db_appt = models.Appointment(
         hospital=appt.hospital,
         doctor=display_name,
