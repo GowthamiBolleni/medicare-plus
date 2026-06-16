@@ -349,29 +349,65 @@ def calculate_health_score_trend(user_id: int, db: Session):
 
 @app.get("/api/debug-db")
 def debug_db():
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        return {"status": "error", "message": "DATABASE_URL environment variable is not set"}
-    
-    import re
-    # Mask password for security
-    masked_url = re.sub(r":([^@]+)@", ":[MASKED_PASSWORD]@", db_url)
-    
+    import traceback
+    steps = {}
     try:
-        from sqlalchemy import create_engine, text
-        temp_engine = create_engine(db_url)
-        with temp_engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        # Step 1: Password hashing check
+        steps["1_import_auth"] = "starting"
+        import auth
+        steps["1_import_auth"] = "success"
+        
+        steps["2_hash_password"] = "starting"
+        hashed = auth.get_password_hash("New@1234")
+        steps["2_hash_password"] = f"success: {hashed[:15]}..."
+        
+        # Step 2: Database connection and insert
+        steps["3_db_connect"] = "starting"
+        from database import SessionLocal
+        db = SessionLocal()
+        steps["3_db_connect"] = "success"
+        
+        steps["4_insert_test_user"] = "starting"
+        # Delete test_debug_user if exists
+        db.query(models.User).filter(models.User.username == "test_debug_user").delete()
+        db.commit()
+        
+        new_user = models.User(
+            username="test_debug_user",
+            email="test_debug_user@gmail.com",
+            hashed_password=hashed,
+            full_name=None,
+            age=None,
+            gender="Female",
+            height=None,
+            weight=None,
+            phone="",
+            health_score=0
+        )
+        db.add(new_user)
+        db.commit()
+        steps["4_insert_test_user"] = "success"
+        
+        steps["5_refresh_user"] = "starting"
+        db.refresh(new_user)
+        steps["5_refresh_user"] = f"success: id={new_user.id}"
+        
+        # Clean up
+        db.delete(new_user)
+        db.commit()
+        db.close()
+        
         return {
             "status": "success",
-            "message": "Connected to database successfully!",
-            "database_url": masked_url
+            "steps": steps
         }
     except Exception as e:
+        tb = traceback.format_exc()
         return {
             "status": "error",
-            "message": str(e),
-            "database_url": masked_url
+            "steps": steps,
+            "error": str(e),
+            "traceback": tb
         }
 
 # ================= AUTHENTICATION =================
