@@ -458,6 +458,47 @@ def debug_db():
             "traceback": tb
         }
 
+@app.get("/api/debug-twilio")
+def debug_twilio():
+    import os, traceback
+    from twilio.rest import Client
+    
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_number = os.getenv("TWILIO_FROM_NUMBER")
+    
+    status = {}
+    status["account_sid_present"] = bool(account_sid)
+    status["account_sid_prefix_ok"] = account_sid.startswith("AC") if account_sid else False
+    status["auth_token_present"] = bool(auth_token)
+    status["from_number_present"] = bool(from_number)
+    
+    if not account_sid or not auth_token or not from_number:
+        return {"status": "error", "reason": "Missing environment variables", "details": status}
+        
+    try:
+        client = Client(account_sid, auth_token)
+        to_number = "+917989024265"
+        message = client.messages.create(
+            to=to_number,
+            from_=from_number,
+            body="Medicare+ Twilio Debug Test Message"
+        )
+        return {
+            "status": "success",
+            "message_sid": message.sid,
+            "details": status
+        }
+    except Exception as e:
+        tb = traceback.format_exc()
+        return {
+            "status": "error",
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "traceback": tb,
+            "details": status
+        }
+
 # ================= AUTHENTICATION =================
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse)
