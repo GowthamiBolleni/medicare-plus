@@ -6,6 +6,7 @@ export default function MedicalHistory() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // New Record Form State
   const [newRec, setNewRec] = useState({
@@ -33,11 +34,13 @@ export default function MedicalHistory() {
 
   const handleAddRecord = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     if (!newRec.condition || !newRec.diagnosis_date || !newRec.status) {
       return alert("Please fill in condition, date and status.");
     }
 
     try {
+      setSubmitting(true);
       const res = await medicalHistoryAPI.create(newRec);
       setRecords([...records, res]);
       setShowModal(false);
@@ -49,6 +52,9 @@ export default function MedicalHistory() {
       });
     } catch (err) {
       console.error("Error saving medical history record", err);
+      alert(err.response?.data?.detail || "Failed to save medical history record. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -198,9 +204,12 @@ export default function MedicalHistory() {
 
               <button
                 type="submit"
-                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
+                disabled={submitting}
+                className={`w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer ${
+                  submitting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               >
-                Save
+                {submitting ? "Saving..." : "Save"}
               </button>
             </form>
           </div>
