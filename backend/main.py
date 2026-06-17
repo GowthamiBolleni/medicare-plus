@@ -1205,6 +1205,46 @@ async def upload_bill(
         except Exception as e:
             print(f"[OCR] Tesseract OCR failed: {e}")
 
+    # Fallback to Gemini OCR if local text extraction yielded no results
+    if not text.strip():
+        print("[OCR] Local extraction failed or missing dependencies. Attempting Gemini OCR fallback...")
+        try:
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+            
+            with open(filepath, "rb") as f:
+                file_bytes = f.read()
+            
+            # Determine mime type
+            mime_type = "image/jpeg"
+            if filepath.lower().endswith(".pdf"):
+                mime_type = "application/pdf"
+            elif filepath.lower().endswith(".png"):
+                mime_type = "image/png"
+            elif filepath.lower().endswith(".gif"):
+                mime_type = "image/gif"
+            
+            # Initialize Gemini model
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash")
+            except Exception:
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                except Exception:
+                    model = genai.GenerativeModel("gemini-pro")
+            
+            response = model.generate_content([
+                "Extract all text from this medical bill / invoice receipt exactly as it is written. "
+                "Do not summarize. Just transcribe all lines of text.",
+                {"mime_type": mime_type, "data": file_bytes}
+            ])
+            if response.text:
+                text = response.text
+                print("[OCR] Successfully extracted text using Gemini OCR fallback!")
+        except Exception as gemini_err:
+            print(f"[OCR] Gemini OCR fallback failed: {gemini_err}")
+
     if not text.strip():
         print("OCR extraction failing.")
         return {
