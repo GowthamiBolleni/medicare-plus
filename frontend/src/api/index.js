@@ -274,7 +274,20 @@ export const familyAPI = {
       name: member.name,
       relation: member.relation,
       phone: member.phone || "",
-      is_emergency_contact: member.is_emergency_contact || false
+      is_emergency_contact: member.is_emergency_contact || false,
+      age: member.age ? parseInt(member.age, 10) : null,
+      health_score: member.health_score ? parseInt(member.health_score, 10) : 95
+    });
+    return response.data;
+  },
+  update: async (id, member) => {
+    const response = await apiClient.put(`/family/${id}`, {
+      name: member.name,
+      relation: member.relation,
+      phone: member.phone || "",
+      is_emergency_contact: member.is_emergency_contact || false,
+      age: member.age ? parseInt(member.age, 10) : null,
+      health_score: member.health_score ? parseInt(member.health_score, 10) : 95
     });
     return response.data;
   },

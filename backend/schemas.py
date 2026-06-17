@@ -163,9 +163,19 @@ class FamilyMemberBase(BaseModel):
     relation: str
     phone: str
     is_emergency_contact: bool = False
+    age: Optional[int] = None
+    health_score: Optional[int] = 95
 
 class FamilyMemberCreate(FamilyMemberBase):
     pass
+
+class FamilyMemberUpdate(BaseModel):
+    name: Optional[str] = None
+    relation: Optional[str] = None
+    phone: Optional[str] = None
+    is_emergency_contact: Optional[bool] = None
+    age: Optional[int] = None
+    health_score: Optional[int] = None
 
 class FamilyMemberResponse(FamilyMemberBase):
     id: int

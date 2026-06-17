@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Users, Plus, ShieldCheck, HeartPulse, Heart, Trash2, X } from "lucide-react";
+import { Users, Plus, ShieldCheck, HeartPulse, Heart, Trash2, X, Pencil } from "lucide-react";
 import { familyAPI } from "../api";
 const getRelationEmoji = (relation) => {
   const r = relation ? relation.toLowerCase() : "";
@@ -16,6 +16,7 @@ export default function Family() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
 
   // New Member Form State
   const [newMember, setNewMember] = useState({
@@ -77,6 +78,21 @@ export default function Family() {
     }
   };
 
+  const handleUpdateMember = async (e) => {
+    e.preventDefault();
+    if (!editingMember.name || !editingMember.age) {
+      return alert("Please specify the family member name and age.");
+    }
+
+    try {
+      const res = await familyAPI.update(editingMember.id, editingMember);
+      setMembers(members.map(m => m.id === editingMember.id ? res : m));
+      setEditingMember(null);
+    } catch (err) {
+      console.error("Error updating family member account", err);
+    }
+  };
+
   return (
     <div className="p-8 space-y-8 font-sans max-w-5xl mx-auto animate-fade-in">
       {/* Header */}
@@ -115,13 +131,23 @@ export default function Family() {
               className="bg-white border border-slate-100 rounded-3xl p-5 shadow-premium flex flex-col justify-between hover-glow smooth-hover text-center min-h-[260px]"
             >
               <div className="space-y-4 flex flex-col items-center relative">
-                {/* Delete button absolute corner */}
-                <button
-                  onClick={() => handleUnlinkMember(member.id)}
-                  className="absolute top-0 right-0 p-1 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* Action buttons absolute corner */}
+                <div className="absolute top-0 right-0 flex items-center gap-1">
+                  <button
+                    onClick={() => setEditingMember(member)}
+                    className="p-1 text-slate-300 hover:text-brand-600 rounded-lg hover:bg-slate-50 transition-colors"
+                    title="Edit Profile"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleUnlinkMember(member.id)}
+                    className="p-1 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    title="Unlink Account"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
 
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-slate-100 relative shadow-md bg-slate-50 flex items-center justify-center text-3xl shrink-0">
                   {member.image ? (
@@ -261,6 +287,103 @@ export default function Family() {
                 className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
               >
                 Link Family Account
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Account Modal Panel */}
+      {editingMember && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
+            <X
+              onClick={() => setEditingMember(null)}
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
+            />
+
+            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Family Profile</h3>
+
+            <form onSubmit={handleUpdateMember} className="space-y-4 font-sans text-sm">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Family Member Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Ramesh Kumar"
+                  value={editingMember.name || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Relation</label>
+                  <select
+                    value={editingMember.relation || "Spouse"}
+                    onChange={(e) => setEditingMember({ ...editingMember, relation: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  >
+                    <option value="Spouse">Spouse</option>
+                    <option value="Daughter">Daughter</option>
+                    <option value="Son">Son</option>
+                    <option value="Father">Father</option>
+                    <option value="Mother">Mother</option>
+                    <option value="Sibling">Sibling</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age (Years)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g., 34"
+                    value={editingMember.age || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, age: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Est. Health Score (%)</label>
+                <input
+                  type="number"
+                  placeholder="e.g., 95"
+                  value={editingMember.health_score || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, health_score: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="Phone Number"
+                  value={editingMember.phone || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="edit_is_emergency_contact"
+                  checked={editingMember.is_emergency_contact || false}
+                  onChange={(e) => setEditingMember({ ...editingMember, is_emergency_contact: e.target.checked })}
+                  className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500 cursor-pointer"
+                />
+                <label htmlFor="edit_is_emergency_contact" className="text-xs font-bold text-slate-500 uppercase tracking-wide cursor-pointer select-none">
+                  Emergency Contact
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
+              >
+                Save Changes
               </button>
             </form>
           </div>

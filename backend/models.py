@@ -112,6 +112,8 @@ class FamilyMember(Base):
     relation = Column(String)
     phone = Column(String)
     is_emergency_contact = Column(Boolean, default=False)
+    age = Column(Integer, nullable=True)
+    health_score = Column(Integer, default=95)
     user_id = Column(Integer, ForeignKey("users.id"))
 
     user = relationship("User", back_populates="family")

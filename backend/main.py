@@ -82,6 +82,18 @@ except Exception:
 
 try:
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE family ADD COLUMN age INTEGER"))
+except Exception:
+    pass
+
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE family ADD COLUMN health_score INTEGER DEFAULT 95"))
+except Exception:
+    pass
+
+try:
+    with engine.begin() as conn:
         conn.execute(text("ALTER TABLE medical_history ADD COLUMN condition VARCHAR"))
 except Exception:
     pass
@@ -2902,9 +2914,37 @@ def add_family_member(member: schemas.FamilyMemberCreate, current_user: models.U
         relation=member.relation,
         phone=member.phone,
         is_emergency_contact=member.is_emergency_contact,
+        age=member.age,
+        health_score=member.health_score if member.health_score is not None else 95,
         user_id=current_user.id
     )
     db.add(db_member)
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+@app.put("/api/family/{member_id}", response_model=schemas.FamilyMemberResponse)
+def update_family_member(member_id: int, member_update: schemas.FamilyMemberUpdate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    db_member = db.query(models.FamilyMember).filter(
+        models.FamilyMember.id == member_id,
+        models.FamilyMember.user_id == current_user.id
+    ).first()
+    if not db_member:
+        raise HTTPException(status_code=404, detail="Family member not found")
+    
+    if member_update.name is not None:
+        db_member.name = member_update.name
+    if member_update.relation is not None:
+        db_member.relation = member_update.relation
+    if member_update.phone is not None:
+        db_member.phone = member_update.phone
+    if member_update.is_emergency_contact is not None:
+        db_member.is_emergency_contact = member_update.is_emergency_contact
+    if member_update.age is not None:
+        db_member.age = member_update.age
+    if member_update.health_score is not None:
+        db_member.health_score = member_update.health_score
+        
     db.commit()
     db.refresh(db_member)
     return db_member
