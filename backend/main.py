@@ -32,6 +32,13 @@ def send_twilio_sms(to_number: str, body: str):
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     from_number = os.getenv("TWILIO_FROM_NUMBER")
     
+    if account_sid:
+        account_sid = account_sid.strip().strip("'").strip('"')
+    if auth_token:
+        auth_token = auth_token.strip().strip("'").strip('"')
+    if from_number:
+        from_number = from_number.strip().strip("'").strip('"')
+        
     if not account_sid or not auth_token or not from_number:
         print("[Twilio SMS] Missing configuration. Skipping SMS send.")
         return False
@@ -467,6 +474,13 @@ def debug_twilio():
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     from_number = os.getenv("TWILIO_FROM_NUMBER")
     
+    if account_sid:
+        account_sid = account_sid.strip().strip("'").strip('"')
+    if auth_token:
+        auth_token = auth_token.strip().strip("'").strip('"')
+    if from_number:
+        from_number = from_number.strip().strip("'").strip('"')
+        
     status = {}
     status["account_sid_present"] = bool(account_sid)
     status["account_sid_prefix_ok"] = account_sid.startswith("AC") if account_sid else False
