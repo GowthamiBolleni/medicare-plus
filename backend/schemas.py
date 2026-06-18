@@ -54,6 +54,7 @@ class MedicineBase(BaseModel):
     time: str
     category: Optional[str] = "Tablet"
     status: Optional[str] = "Upcoming"
+    frequency: Optional[str] = "Everyday"
 
 class MedicineCreate(MedicineBase):
     pass
@@ -64,6 +65,7 @@ class MedicineUpdate(BaseModel):
     dosage: Optional[str] = None
     instructions: Optional[str] = None
     time: Optional[str] = None
+    frequency: Optional[str] = None
 
 class MedicineResponse(MedicineBase):
     id: int

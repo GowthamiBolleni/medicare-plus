@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from "react";
 import { Pill, Plus, Trash2, Clock, Check, Calendar, HelpCircle, PlusCircle, X } from "lucide-react";
 import api, { medicinesAPI } from "../api";
 
+const getFrequencyLabel = (freq) => {
+  if (!freq) return "Everyday";
+  if (freq === "Monday, Wednesday, Friday") return "Mon, Wed, Fri";
+  if (freq === "Tuesday, Thursday, Saturday") return "Tue, Thu, Sat";
+  return freq;
+};
+
 export default function Medicines({ profile, onProfileUpdate }) {
   const [medicines, setMedicines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +25,7 @@ export default function Medicines({ profile, onProfileUpdate }) {
     instructions: "After Food",
     time: "08:00",
     category: "Tablet",
+    frequency: "Everyday",
   });
 
   const loadMedicines = async () => {
@@ -140,6 +148,7 @@ export default function Medicines({ profile, onProfileUpdate }) {
         instructions: "After Food",
         time: "08:00",
         category: "Tablet",
+        frequency: "Everyday",
       });
     } catch (err) {
       console.error("Error adding medicine", err);
@@ -227,7 +236,7 @@ export default function Medicines({ profile, onProfileUpdate }) {
                 <div>
                   <h3 className="text-sm font-bold text-slate-800 font-sans">{med.name}</h3>
                   <p className="text-xs text-slate-400 mt-1 font-sans">
-                    {med.dosage} · {med.instructions}
+                    {med.dosage} · {med.instructions} · {getFrequencyLabel(med.frequency)}
                   </p>
                   <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-3 font-semibold font-sans">
                     <Clock className="w-3.5 h-3.5" /> {
@@ -334,6 +343,21 @@ export default function Medicines({ profile, onProfileUpdate }) {
                     <option value="With Food">With Food</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
+                <select
+                  value={newMed.frequency}
+                  onChange={(e) => setNewMed({ ...newMed, frequency: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                >
+                  <option value="Everyday">Everyday</option>
+                  <option value="Alternate Days">Alternate Days</option>
+                  <option value="Monday, Wednesday, Friday">Mon, Wed, Fri</option>
+                  <option value="Tuesday, Thursday, Saturday">Tue, Thu, Sat</option>
+                  <option value="Sunday">Sunday Only</option>
+                </select>
               </div>
 
               <div className="border-t border-slate-50 pt-4">

@@ -101,6 +101,12 @@ except Exception:
 
 try:
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE medicines ADD COLUMN frequency VARCHAR DEFAULT 'Everyday'"))
+except Exception:
+    pass
+
+try:
+    with engine.begin() as conn:
         conn.execute(text("ALTER TABLE medical_history ADD COLUMN condition VARCHAR"))
 except Exception:
     pass
@@ -553,6 +559,19 @@ def update_profile(profile_update: schemas.UserUpdate, current_user: models.User
 
 # Twilio messaging integrations removed (SMS and WhatsApp)
 
+def is_medicine_scheduled_on(med: models.Medicine, target_date: datetime.date) -> bool:
+    freq = (med.frequency or "Everyday").strip().lower()
+    if freq == "everyday":
+        return True
+    if freq == "alternate days":
+        creation_date = med.date_scheduled.date() if med.date_scheduled else target_date
+        days_diff = (target_date - creation_date).days
+        return days_diff % 2 == 0
+    
+    weekday_target = target_date.strftime("%A").lower()
+    scheduled_days = [d.strip().lower() for d in freq.split(",") if d.strip()]
+    return weekday_target in scheduled_days
+
 def check_medicine_reminders_job():
     db = Session(bind=engine)
     try:
@@ -562,6 +581,8 @@ def check_medicine_reminders_job():
         start_of_today_utc = datetime.datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0)
         meds = db.query(models.Medicine).filter(models.Medicine.status == "Upcoming").all()
         for med in meds:
+            if not is_medicine_scheduled_on(med, local_now.date()):
+                continue
             time_str = med.time.strip()
             try:
                 if "AM" in time_str.upper() or "PM" in time_str.upper():
@@ -658,6 +679,8 @@ def generate_automatic_notifications(db: Session, user_id: int):
         models.Medicine.status == "Upcoming"
     ).all()
     for med in meds:
+        if not is_medicine_scheduled_on(med, local_now.date()):
+            continue
         time_str = med.time.strip()
         try:
             if "AM" in time_str.upper() or "PM" in time_str.upper():
@@ -813,9 +836,11 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
     generate_automatic_notifications(db, current_user.id)
     
     # 1. Fetch Today's medicines to take
-    today_meds = db.query(models.Medicine).filter(
+    all_meds = db.query(models.Medicine).filter(
         models.Medicine.user_id == current_user.id
     ).all()
+    local_now = datetime.datetime.now()
+    today_meds = [m for m in all_meds if is_medicine_scheduled_on(m, local_now.date())]
     
     taken_meds = len([m for m in today_meds if m.status == "Taken"])
     total_meds = len(today_meds)
@@ -938,6 +963,7 @@ def add_medicine(med: schemas.MedicineCreate, current_user: models.User = Depend
         time=med.time,
         category=med.category,
         status="Upcoming",
+        frequency=med.frequency if med.frequency is not None else "Everyday",
         user_id=current_user.id
     )
     db.add(db_med)
@@ -965,6 +991,8 @@ def update_medicine(med_id: int, med_update: schemas.MedicineUpdate, current_use
         db_med.instructions = med_update.instructions
     if med_update.time is not None:
         db_med.time = med_update.time
+    if med_update.frequency is not None:
+        db_med.frequency = med_update.frequency
         
     db.commit()
     db.refresh(db_med)
