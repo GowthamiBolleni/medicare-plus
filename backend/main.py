@@ -737,7 +737,18 @@ def generate_automatic_notifications(db: Session, user_id: int):
     ).all()
     for appt in appts:
         appt_date = appt.date
+        parsed_date = None
         if isinstance(appt_date, datetime.datetime):
+            parsed_date = appt_date
+        elif isinstance(appt_date, datetime.date):
+            parsed_date = datetime.datetime(appt_date.year, appt_date.month, appt_date.day)
+        elif isinstance(appt_date, str):
+            m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", appt_date.strip())
+            if m:
+                year, month, day = map(int, m.groups())
+                parsed_date = datetime.datetime(year, month, day)
+
+        if parsed_date is not None:
             time_str = appt.time.strip()
             try:
                 if "AM" in time_str.upper() or "PM" in time_str.upper():
@@ -750,7 +761,7 @@ def generate_automatic_notifications(db: Session, user_id: int):
                 hour = 0
                 minute = 0
 
-            appt_datetime_local = datetime.datetime(appt_date.year, appt_date.month, appt_date.day, hour, minute)
+            appt_datetime_local = datetime.datetime(parsed_date.year, parsed_date.month, parsed_date.day, hour, minute)
 
             # Parse appt.time to construct appt_datetime_local
             doc_name = appt.doctor.strip()
@@ -766,7 +777,7 @@ def generate_automatic_notifications(db: Session, user_id: int):
                 appt.status = "Missed"
                 db.commit()
 
-                msg = f"Alert: You missed your appointment with {display_doctor} scheduled at {appt.time} on {appt_date.strftime('%Y-%m-%d')}."
+                msg = f"Alert: You missed your appointment with {display_doctor} scheduled at {appt.time} on {parsed_date.strftime('%Y-%m-%d')}."
                 exists = db.query(models.Notification).filter(
                     models.Notification.user_id == user_id,
                     models.Notification.message == msg,
@@ -777,7 +788,7 @@ def generate_automatic_notifications(db: Session, user_id: int):
                     db.commit()
             else:
                 # Compare date portion for tomorrow's reminder
-                time_diff = appt_date - now_utc
+                time_diff = parsed_date - now_utc
                 if 0 <= time_diff.total_seconds() <= 86400:
                     msg = f"Appointment tomorrow with {display_doctor}"
                     exists = db.query(models.Notification).filter(
@@ -1016,6 +1027,7 @@ def delete_medicine(med_id: int, current_user: models.User = Depends(auth.get_cu
 
 @app.get("/api/appointments", response_model=List[schemas.AppointmentResponse])
 def get_appointments(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    generate_automatic_notifications(db, current_user.id)
     return db.query(models.Appointment).filter(models.Appointment.user_id == current_user.id).all()
 
 @app.post("/api/appointments", response_model=schemas.AppointmentResponse)
@@ -1027,11 +1039,18 @@ def book_appointment(appt: schemas.AppointmentCreate, current_user: models.User 
     else:
         display_name = f"Dr. {doctor_name}"
 
+    db_date = appt.date
+    if "sqlite" in str(engine.url) and isinstance(db_date, str):
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", db_date.strip())
+        if m:
+            year, month, day = map(int, m.groups())
+            db_date = datetime.datetime(year, month, day)
+
     # Check for duplicate appointment (same doctor, date, time, and user)
     existing = db.query(models.Appointment).filter(
         models.Appointment.user_id == current_user.id,
         models.Appointment.doctor == display_name,
-        models.Appointment.date == appt.date,
+        models.Appointment.date == db_date,
         models.Appointment.time == appt.time,
         models.Appointment.status == "Upcoming"
     ).first()
@@ -1045,7 +1064,7 @@ def book_appointment(appt: schemas.AppointmentCreate, current_user: models.User 
         hospital=appt.hospital,
         doctor=display_name,
         specialty=appt.specialty,
-        date=appt.date,
+        date=db_date,
         time=appt.time,
         status="Upcoming",
         description=appt.description,
