@@ -27,7 +27,7 @@ from database import engine, Base, get_db
 
 Base.metadata.create_all(bind=engine)
 
-def send_twilio_sms(to_number: str, body: str):
+def send_twilio_whatsapp(to_number: str, body: str):
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     from_number = os.getenv("TWILIO_FROM_NUMBER")
@@ -40,7 +40,7 @@ def send_twilio_sms(to_number: str, body: str):
         from_number = from_number.strip().strip("'").strip('"')
         
     if not account_sid or not auth_token or not from_number:
-        print("[Twilio SMS] Missing configuration. Skipping SMS send.")
+        print("[Twilio WhatsApp] Missing configuration. Skipping WhatsApp send.")
         return False
         
     try:
@@ -55,19 +55,19 @@ def send_twilio_sms(to_number: str, body: str):
                 to_clean = "+" + to_clean
 
         if not account_sid.startswith("AC"):
-            print("[Twilio SMS] Invalid Twilio Account SID prefix. Skipping SMS send.")
+            print("[Twilio WhatsApp] Invalid Twilio Account SID prefix. Skipping WhatsApp send.")
             return False
             
         client = Client(account_sid, auth_token)
         message = client.messages.create(
-            to=to_clean,
-            from_=from_number,
+            to=f"whatsapp:{to_clean}",
+            from_=f"whatsapp:{from_number}",
             body=body
         )
-        print(f"[Twilio SMS] Message sent successfully! SID: {message.sid}")
+        print(f"[Twilio WhatsApp] WhatsApp message sent successfully! SID: {message.sid}")
         return True
     except Exception as e:
-        print(f"[Twilio SMS] Failed to send SMS: {e}")
+        print(f"[Twilio WhatsApp] Failed to send WhatsApp: {e}")
         return False
 
 # Dynamic DB Migration for last_sos_time column
@@ -596,11 +596,11 @@ def check_medicine_reminders_job():
                         db.commit()
                         print(f"[Scheduler] Notification created for {med.name} (User {med.user_id})")
                         
-                        # Send real Twilio SMS reminder to user
+                        # Send real Twilio WhatsApp reminder to user
                         user = db.query(models.User).filter(models.User.id == med.user_id).first()
                         if user and user.phone:
                             sms_body = f"Medicare+ Reminder: It is time to take your medicine '{med.name}' ({med.dosage}) scheduled at {med.time}."
-                            send_twilio_sms(user.phone, sms_body)
+                            send_twilio_whatsapp(user.phone, sms_body)
 
 
                 # 2. Mark as Missed if today's time has passed the scheduled time by more than 1 minute
@@ -2732,8 +2732,8 @@ def trigger_sos(
     for member in emergency_contacts:
         if member.phone:
             formatted_p = format_phone(member.phone)
-            # Send real Twilio SMS
-            sent_status = send_twilio_sms(member.phone, sms_body)
+            # Send real Twilio WhatsApp
+            sent_status = send_twilio_whatsapp(member.phone, sms_body)
             status_tag = "Sent" if sent_status else "Failed"
             contacts_sent.append(f"{member.name} ({member.relation}): {formatted_p} [{status_tag}]")
             
@@ -2741,7 +2741,7 @@ def trigger_sos(
     if not emergency_contacts:
         fallback_phone = "+919876543210"
         formatted_f = format_phone(fallback_phone)
-        sent_status = send_twilio_sms(fallback_phone, sms_body)
+        sent_status = send_twilio_whatsapp(fallback_phone, sms_body)
         status_tag = "Sent" if sent_status else "Failed"
         contacts_sent.append(f"Emergency Dispatcher ({formatted_f}) [{status_tag}]")
         
