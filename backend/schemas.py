@@ -67,6 +67,7 @@ class MedicineUpdate(BaseModel):
     instructions: Optional[str] = None
     time: Optional[str] = None
     frequency: Optional[str] = None
+    category: Optional[str] = None
 
 class MedicineResponse(MedicineBase):
     id: int

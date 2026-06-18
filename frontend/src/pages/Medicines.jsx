@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pill, Plus, Trash2, Clock, Check, Calendar, HelpCircle, PlusCircle, X } from "lucide-react";
+import { Pill, Plus, Trash2, Clock, Check, Calendar, HelpCircle, PlusCircle, X, Pencil } from "lucide-react";
 import api, { medicinesAPI } from "../api";
 
 const getFrequencyLabel = (freq) => {
@@ -19,6 +19,7 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
   // New Medicine Modal & Form State
   const [showModal, setShowModal] = useState(false);
+  const [editingMed, setEditingMed] = useState(null);
   const [newMed, setNewMed] = useState({
     name: "",
     dosage: "1 Tablet",
@@ -155,6 +156,18 @@ export default function Medicines({ profile, onProfileUpdate }) {
     }
   };
 
+  const handleEditMedicine = async (e) => {
+    e.preventDefault();
+    if (!editingMed.name) return alert("Please specify the medicine name.");
+    try {
+      const res = await medicinesAPI.update(editingMed.id, editingMed);
+      setMedicines(medicines.map(m => m.id === editingMed.id ? res : m));
+      setEditingMed(null);
+    } catch (err) {
+      console.error("Error editing medicine", err);
+    }
+  };
+
   const filteredMedicines = medicines.filter((m) => {
     if (activeTab === "All") return true;
     return m.status === activeTab;
@@ -261,12 +274,22 @@ export default function Medicines({ profile, onProfileUpdate }) {
                 >
                   {med.status === "Taken" ? "Taken" : med.status === "Missed" ? "Missed" : "Upcoming"}
                 </button>
-                <button
-                  onClick={() => handleDeleteMedicine(med.id)}
-                  className="p-1.5 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingMed(med)}
+                    className="p-1.5 text-slate-300 hover:text-brand-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    title="Edit Medicine"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMedicine(med.id)}
+                    className="p-1.5 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    title="Remove Medicine"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -371,6 +394,104 @@ export default function Medicines({ profile, onProfileUpdate }) {
                 className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-4 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
               >
                 Schedule Medicine
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Medicine Modal Panel */}
+      {editingMed && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
+            <X
+              onClick={() => setEditingMed(null)}
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
+            />
+
+            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Medication Schedule</h3>
+
+            <form onSubmit={handleEditMedicine} className="space-y-4 font-sans text-sm">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Medicine Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Paracetamol 500mg"
+                  value={editingMed.name}
+                  onChange={(e) => setEditingMed({ ...editingMed, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Dosage</label>
+                  <input
+                    type="text"
+                    value={editingMed.dosage}
+                    onChange={(e) => setEditingMed({ ...editingMed, dosage: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Category</label>
+                  <select
+                    value={editingMed.category}
+                    onChange={(e) => setEditingMed({ ...editingMed, category: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  >
+                    <option value="Tablet">Tablet</option>
+                    <option value="Capsule">Capsule</option>
+                    <option value="Syrup">Syrup</option>
+                    <option value="Injection">Injection</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Time Schedule</label>
+                  <input
+                    type="time"
+                    value={editingMed.time}
+                    onChange={(e) => setEditingMed({ ...editingMed, time: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Instructions</label>
+                  <select
+                    value={editingMed.instructions}
+                    onChange={(e) => setEditingMed({ ...editingMed, instructions: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  >
+                    <option value="After Food">After Food</option>
+                    <option value="Before Food">Before Food</option>
+                    <option value="With Food">With Food</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
+                <select
+                  value={editingMed.frequency}
+                  onChange={(e) => setEditingMed({ ...editingMed, frequency: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                >
+                  <option value="Everyday">Everyday</option>
+                  <option value="Alternate Days">Alternate Days</option>
+                  <option value="Monday, Wednesday, Friday">Mon, Wed, Fri</option>
+                  <option value="Tuesday, Thursday, Saturday">Tue, Thu, Sat</option>
+                  <option value="Sunday">Sunday Only</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-4 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
+              >
+                Save Changes
               </button>
             </form>
           </div>

@@ -126,6 +126,13 @@ export const medicinesAPI = {
       `/medicines/${id}`
     );
     return response.data;
+  },
+  update: async (id, medicine) => {
+    const response = await apiClient.put(
+      `/medicines/${id}`,
+      medicine
+    );
+    return response.data;
   }
 };
 

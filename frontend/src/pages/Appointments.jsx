@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Clock, MapPin, Plus, Trash2, ShieldAlert, Award, X, Sparkles } from "lucide-react";
+import { Calendar, Clock, MapPin, Plus, Trash2, ShieldAlert, Award, X, Sparkles, Pencil } from "lucide-react";
 import { appointmentsAPI } from "../api";
 
 export default function Appointments() {
@@ -9,6 +9,7 @@ export default function Appointments() {
   
   // Book Appointment State
   const [showModal, setShowModal] = useState(false);
+  const [editingAppt, setEditingAppt] = useState(null);
   const [newAppt, setNewAppt] = useState({
     hospital: "Apollo Hospital",
     doctor: "Dr. Sharma",
@@ -70,6 +71,26 @@ export default function Appointments() {
       alert(err.response?.data?.detail || "Failed to book appointment. You may already have scheduled an appointment at this time.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleEditAppointment = async (e) => {
+    e.preventDefault();
+    if (!editingAppt.doctor || !editingAppt.hospital) return alert("Please fill in Doctor and Hospital details.");
+    try {
+      // Find matching doctor details
+      const doc = doctorsList.find((d) => d.name === editingAppt.doctor) || doctorsList[0];
+      const payload = {
+        ...editingAppt,
+        specialty: doc.specialty,
+        hospital: doc.hospital,
+      };
+      const res = await appointmentsAPI.update(editingAppt.id, payload);
+      setAppointments(appointments.map(a => a.id === editingAppt.id ? res : a));
+      setEditingAppt(null);
+    } catch (err) {
+      console.error("Error editing appointment", err);
+      alert(err.response?.data?.detail || "Failed to update appointment.");
     }
   };
 
@@ -235,6 +256,22 @@ export default function Appointments() {
                   {appt.status === "Completed" ? "Mark as Incomplete" : "Mark as Completed"}
                 </button>
                 <button
+                  onClick={() => {
+                    let formattedDate = appt.date;
+                    if (appt.date && appt.date.includes("T")) {
+                      formattedDate = appt.date.split("T")[0];
+                    }
+                    setEditingAppt({
+                      ...appt,
+                      date: formattedDate
+                    });
+                  }}
+                  className="bg-slate-50 hover:bg-brand-50 hover:text-brand-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200"
+                  title="Edit Appointment"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => handleCancelAppointment(appt.id)}
                   className="bg-slate-50 hover:bg-emergency-50 hover:text-emergency-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200"
                   title="Cancel Appointment"
@@ -326,6 +363,88 @@ export default function Appointments() {
                 }`}
               >
                 {submitting ? "Confirming..." : "Confirm Appointment"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Appointment Modal */}
+      {editingAppt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
+            <X
+              onClick={() => setEditingAppt(null)}
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
+            />
+
+            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-brand-500" /> Edit Clinical Session
+            </h3>
+
+            <form onSubmit={handleEditAppointment} className="space-y-4 font-sans text-sm">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Select Doctor</label>
+                <select
+                  value={editingAppt.doctor}
+                  onChange={(e) => {
+                    const doc = doctorsList.find((d) => d.name === e.target.value);
+                    setEditingAppt({
+                      ...editingAppt,
+                      doctor: e.target.value,
+                      hospital: doc.hospital,
+                      specialty: doc.specialty,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                >
+                  {doctorsList.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.name} ({d.specialty}) – {d.hospital}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Date</label>
+                  <input
+                    type="date"
+                    value={editingAppt.date}
+                    onChange={(e) => setEditingAppt({ ...editingAppt, date: e.target.value })}
+                    onClick={(e) => e.target.showPicker()}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Time</label>
+                  <input
+                    type="time"
+                    value={editingAppt.time}
+                    onChange={(e) => setEditingAppt({ ...editingAppt, time: e.target.value })}
+                    onClick={(e) => e.target.showPicker()}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Reason for Visit</label>
+                <textarea
+                  placeholder="Describe your symptoms or objectives..."
+                  value={editingAppt.description || ""}
+                  onChange={(e) => setEditingAppt({ ...editingAppt, description: e.target.value })}
+                  rows="3"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl mt-6 shadow-md hover:shadow-lg transition-all duration-200 font-sans cursor-pointer"
+              >
+                Save Changes
               </button>
             </form>
           </div>

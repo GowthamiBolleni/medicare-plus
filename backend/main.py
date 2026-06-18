@@ -1046,6 +1046,8 @@ def update_medicine(med_id: int, med_update: schemas.MedicineUpdate, current_use
         db_med.time = med_update.time
     if med_update.frequency is not None:
         db_med.frequency = med_update.frequency
+    if med_update.category is not None:
+        db_med.category = med_update.category
         
     db.commit()
     db.refresh(db_med)
@@ -1150,7 +1152,13 @@ def update_appointment(appt_id: int, appt_update: schemas.AppointmentUpdate, cur
     if appt_update.specialty is not None:
         db_appt.specialty = appt_update.specialty
     if appt_update.date is not None:
-        db_appt.date = appt_update.date
+        db_date = appt_update.date
+        if "sqlite" in str(engine.url) and isinstance(db_date, str):
+            m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", db_date.strip())
+            if m:
+                year, month, day = map(int, m.groups())
+                db_date = datetime.datetime(year, month, day)
+        db_appt.date = db_date
     if appt_update.time is not None:
         db_appt.time = appt_update.time
     if appt_update.description is not None:
