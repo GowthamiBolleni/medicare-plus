@@ -764,6 +764,12 @@ def generate_automatic_notifications(db: Session, user_id: int):
                     ).first()
                     if not exists:
                         db.add(models.Notification(message=msg, read=False, user_id=user_id, notification_type="appointment"))
+                        db.commit()
+                        
+                        user_obj = db.query(models.User).filter(models.User.id == user_id).first()
+                        if user_obj and user_obj.phone:
+                            appt_body = f"Medicare+ Appointment Reminder: You have an upcoming appointment tomorrow with {display_doctor} at {appt.time} ({appt.hospital})."
+                            send_twilio_whatsapp(user_obj.phone, appt_body)
 
     db.commit()
 
