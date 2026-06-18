@@ -17,3 +17,4 @@ requests
 apscheduler
 google-generativeai
 email-validator
+supabase==2.6.0
