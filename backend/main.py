@@ -963,6 +963,7 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
 
 @app.get("/api/medicines", response_model=List[schemas.MedicineResponse])
 def get_medicines(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    generate_automatic_notifications(db, current_user.id)
     return db.query(models.Medicine).filter(models.Medicine.user_id == current_user.id).all()
 
 @app.post("/api/medicines", response_model=schemas.MedicineResponse)
