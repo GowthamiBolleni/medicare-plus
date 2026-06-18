@@ -24,6 +24,13 @@ import schemas
 import auth
 import services.ai as ai_service
 from database import engine, Base, get_db
+from supabase import create_client, Client
+from services import report_analyzer
+
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL", "https://riwyhlgutaqjrdcbfzok.supabase.co")
+supabase_key = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpd3lobGd1dGFxanJkY2Jmem9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTUwMTYsImV4cCI6MjA5NTYzMTAxNn0.qgPAN-8721WmrsapcoSJ6yksbv0lyyW_c2c_jh2KJsg")
+supabase_client: Client = create_client(supabase_url, supabase_key)
 
 Base.metadata.create_all(bind=engine)
 
@@ -847,10 +854,6 @@ def generate_automatic_notifications(db: Session, user_id: int):
     db.commit()
 
 def calculate_health_score(user_id: int, db: Session):
-    if user_id == 1:
-        return 85
-    score = 100
-
     latest = (
         db.query(models.HealthMetric)
         .filter(models.HealthMetric.user_id == user_id)
@@ -858,21 +861,35 @@ def calculate_health_score(user_id: int, db: Session):
         .first()
     )
 
-    if not latest:
+    # Base score
+    base_score = 85 if user_id == 1 else 100
+    has_metrics = latest is not None
+    has_reports = db.query(models.MedicalReport).filter(
+        models.MedicalReport.user_id == user_id,
+        models.MedicalReport.analysis_status == "Completed"
+    ).first() is not None
+
+    if not has_metrics and not has_reports:
         return 0
 
-    systolic = latest.systolic_bp or 0
-    sugar = latest.blood_sugar or 0
-    hr = latest.heart_rate or 0
+    score = base_score
+    if has_metrics:
+        systolic = latest.systolic_bp or 0
+        sugar = latest.blood_sugar or 0
+        hr = latest.heart_rate or 0
 
-    if systolic > 140:
-        score -= 15
+        if systolic > 140:
+            score -= 15
+        if sugar > 180:
+            score -= 15
+        if hr > 110:
+            score -= 10
 
-    if sugar > 180:
-        score -= 15
-
-    if hr > 110:
-        score -= 10
+    # Add report impact from completed report analyses
+    analyses = db.query(models.ReportAnalysis).filter(models.ReportAnalysis.user_id == user_id).all()
+    for analysis in analyses:
+        if analysis.health_score_impact:
+            score += analysis.health_score_impact
 
     return max(score, 0)
 
@@ -978,6 +995,28 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
     family_contacts_count = db.query(models.FamilyMember).filter(models.FamilyMember.user_id == current_user.id).count()
     medical_conditions_count = db.query(models.MedicalHistory).filter(models.MedicalHistory.user_id == current_user.id).count()
 
+    # Medical Reports dashboard integration
+    total_reports_uploaded = db.query(models.MedicalReport).filter(models.MedicalReport.user_id == current_user.id).count()
+    
+    latest_report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.user_id == current_user.id
+    ).order_by(models.MedicalReport.uploaded_at.desc()).first()
+    
+    latest_report_date = None
+    if latest_report:
+        latest_report_date = latest_report.uploaded_at.strftime("%Y-%m-%d")
+        
+    reports_requiring_attention = db.query(models.ReportAnalysis).filter(
+        models.ReportAnalysis.user_id == current_user.id,
+        models.ReportAnalysis.health_score_impact < 0
+    ).count()
+    
+    abnormal_findings_count = 0
+    analyses = db.query(models.ReportAnalysis).filter(models.ReportAnalysis.user_id == current_user.id).all()
+    for analysis in analyses:
+        findings = analysis.abnormal_findings or []
+        abnormal_findings_count += len(findings)
+
     return {
         "health_score": health_score,
         "medicines_to_take": meds_to_take,
@@ -995,7 +1034,11 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
         "health_score_trend": trend_data,
         "category_expenses": category_expenses,
         "family_contacts_count": family_contacts_count,
-        "medical_conditions_count": medical_conditions_count
+        "medical_conditions_count": medical_conditions_count,
+        "total_reports_uploaded": total_reports_uploaded,
+        "latest_report_date": latest_report_date,
+        "reports_requiring_attention": reports_requiring_attention,
+        "abnormal_findings_count": abnormal_findings_count
     }
 
 # ================= MEDICINES CRUD =================
@@ -1802,8 +1845,22 @@ def generate_health_summary(user: models.User, db: Session) -> str:
     total_exp = sum(e.amount for e in expenses)
     exp_str = f"Total Spent: ₹{total_exp:.2f}\n" + "\n".join([f"• {e.hospital}: ₹{e.amount} ({e.date})" for e in expenses[:3]]) if expenses else "No expenses logged"
     
-    reports = db.query(models.Report).filter(models.Report.user_id == user.id).order_by(models.Report.created_at.desc()).limit(10).all()
-    rep_str = "\n".join([f"• {r.report_type} ({r.file_path})" for r in reports]) if reports else "No reports uploaded"
+    legacy_reports = db.query(models.Report).filter(models.Report.user_id == user.id).order_by(models.Report.created_at.desc()).limit(5).all()
+    medical_reports = db.query(models.MedicalReport).filter(
+        models.MedicalReport.user_id == user.id,
+        models.MedicalReport.analysis_status == "Completed"
+    ).order_by(models.MedicalReport.uploaded_at.desc()).limit(5).all()
+    
+    rep_items = []
+    for r in medical_reports:
+        analysis = r.analysis
+        sum_str = f" - {analysis.summary}" if (analysis and analysis.summary) else ""
+        rep_items.append(f"• {r.file_name} ({r.file_type}){sum_str}")
+        
+    for r in legacy_reports:
+        rep_items.append(f"• {r.report_type} ({r.file_path})")
+        
+    rep_str = "\n".join(rep_items) if rep_items else "No reports uploaded"
 
     disclaimer = "\n\n*This information is for educational purposes only. Please consult a qualified healthcare professional for diagnosis and treatment.*"
 
@@ -1958,6 +2015,9 @@ def classify_intent(message: str) -> str:
     ]
     if any(k in msg for k in health_insights_keywords):
         return "health_summary"
+        
+    if any(word in msg for word in ["report", "reports", "blood test", "abnormal", "deficienc", "deficiencies", "lab results"]):
+        return "reports"
         
     if any(k in msg for k in ["profile summary", "summarize my profile", "my profile", "profile details"]):
         return "profile_summary"
@@ -2151,12 +2211,36 @@ def compile_relevant_context(db: Session, user: models.User, intent: str) -> str
             context += "- No recent vitals logged.\n"
             
     elif intent == "reports":
-        reports = db.query(models.Report).filter(models.Report.user_id == user.id).order_by(models.Report.created_at.desc()).limit(10).all()
+        legacy_reports = db.query(models.Report).filter(models.Report.user_id == user.id).order_by(models.Report.created_at.desc()).limit(5).all()
+        medical_reports = db.query(models.MedicalReport).filter(
+            models.MedicalReport.user_id == user.id,
+            models.MedicalReport.analysis_status == "Completed"
+        ).order_by(models.MedicalReport.uploaded_at.desc()).limit(10).all()
+        
         context += "Lab & Medical Reports:\n"
-        if reports:
-            for r in reports:
+        has_any_reports = False
+        
+        if medical_reports:
+            has_any_reports = True
+            for r in medical_reports:
+                context += f"- Report: {r.file_name} (Format: {r.file_type}) uploaded on {r.uploaded_at.strftime('%Y-%m-%d')}\n"
+                analysis = r.analysis
+                if analysis:
+                    context += f"  Summary: {analysis.summary}\n"
+                    abnormal = analysis.abnormal_findings or []
+                    normal = analysis.normal_findings or []
+                    recs = analysis.recommendations or []
+                    context += f"  Abnormal Findings: {', '.join(abnormal) if abnormal else 'None'}\n"
+                    context += f"  Normal Findings: {', '.join(normal) if normal else 'None'}\n"
+                    context += f"  Recommendations: {', '.join(recs) if recs else 'None'}\n"
+                    context += f"  Health Score Impact: {analysis.health_score_impact} points\n"
+                    
+        if legacy_reports:
+            has_any_reports = True
+            for r in legacy_reports:
                 context += f"- Type: {r.report_type} (File: {r.file_path}) - Logged: {r.created_at.strftime('%Y-%m-%d') if hasattr(r.created_at, 'strftime') else r.created_at}\n  Summary: {r.summary or 'No summary available.'}\n"
-        else:
+                
+        if not has_any_reports:
             context += "- No reports logged.\n"
             
     elif intent == "expense":
@@ -2750,7 +2834,17 @@ Give personalized health recommendations."""
         
     full_query = f"Conversation History:\n{history_context}\n\nCurrent User Message:\n{msg.content}"
     
-    context = compile_relevant_context(db, current_user, "general")
+    intent_mapping = {
+        "medicines": "medicine",
+        "appointments": "appointment",
+        "expenses": "expense",
+        "reports": "reports",
+        "family": "family",
+        "medical_history": "medical_history",
+        "general_health": "health"
+    }
+    context_intent = intent_mapping.get(intent, intent)
+    context = compile_relevant_context(db, current_user, context_intent)
     
     ai_content = get_gemini_response(full_query, context)
     return save_chat_messages(db, current_user.id, msg.content, ai_content)
@@ -3131,36 +3225,253 @@ def process_and_summarize_report(report_type: str, user_name: str) -> tuple[str,
             
     return raw, summary
 
-@app.get("/api/reports", response_model=List[schemas.ReportResponse])
+@app.get("/api/reports", response_model=List[schemas.MedicalReportResponse])
 def get_reports(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    return db.query(models.Report).filter(models.Report.user_id == current_user.id).all()
+    return db.query(models.MedicalReport).filter(models.MedicalReport.user_id == current_user.id).all()
 
-@app.post("/api/reports", response_model=schemas.ReportResponse)
-def add_report(report: schemas.ReportCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    raw, summ = process_and_summarize_report(report.report_type, current_user.full_name)
-    db_report = models.Report(
-        file_path=report.file_path,
-        report_type=report.report_type,
-        raw_text=raw,
-        summary=summ,
-        user_id=current_user.id
+@app.post("/api/reports/upload", response_model=schemas.MedicalReportResponse)
+async def upload_report(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Enforce supported formats: PDF, JPG, JPEG, PNG
+    allowed_extensions = {".pdf", ".png", ".jpg", ".jpeg"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file format. Only PDF, JPG, JPEG, and PNG are allowed."
+        )
+
+    # Enforce maximum size limit of 10 MB
+    MAX_FILE_SIZE = 10 * 1024 * 1024 # 10 MB
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds the 10 MB limit."
+        )
+
+    # Sanitize name and upload to Supabase Storage
+    unique_filename = f"{uuid.uuid4()}{ext}"
+    storage_path = f"{current_user.id}/{unique_filename}"
+    
+    try:
+        supabase_client.storage.from_("medical-reports").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": file.content_type}
+        )
+    except Exception as e:
+        print(f"[Supabase Storage] Upload error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload report to storage: {str(e)}"
+        )
+        
+    file_url = supabase_client.storage.from_("medical-reports").get_public_url(storage_path)
+    file_type = ext.replace(".", "")
+    
+    # Save to database
+    db_report = models.MedicalReport(
+        user_id=current_user.id,
+        file_name=file.filename,
+        file_url=file_url,
+        file_type=file_type,
+        analysis_status="Pending"
     )
     db.add(db_report)
     db.commit()
     db.refresh(db_report)
     return db_report
 
-@app.delete("/api/reports/{report_id}")
-def delete_report(report_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    db_report = db.query(models.Report).filter(
-        models.Report.id == report_id,
-        models.Report.user_id == current_user.id
+@app.get("/api/reports/{report_id}", response_model=schemas.MedicalReportResponse)
+def get_report_details(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
     ).first()
-    if not db_report:
+    if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    db.delete(db_report)
+    return report
+
+@app.delete("/api/reports/{report_id}")
+def delete_report(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    # Delete from Supabase storage
+    try:
+        file_path_in_bucket = report.file_url.split("/medical-reports/")[-1].split("?")[0]
+        supabase_client.storage.from_("medical-reports").remove(file_path_in_bucket)
+    except Exception as e:
+        print(f"[Supabase Storage] Deletion warning: {e}")
+        
+    db.delete(report)
     db.commit()
+    
+    # Update health score after deletion
+    new_score = calculate_health_score(current_user.id, db)
+    current_user.health_score = new_score
+    db.commit()
+    
     return {"message": "Report deleted successfully"}
+
+@app.post("/api/reports/{report_id}/analyze")
+async def analyze_report(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    report.analysis_status = "Analyzing"
+    db.commit()
+    
+    try:
+        file_path_in_bucket = report.file_url.split("/medical-reports/")[-1].split("?")[0]
+        file_bytes = supabase_client.storage.from_("medical-reports").download(file_path_in_bucket)
+        
+        # Save to temp
+        temp_dir = "uploads/temp"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_filepath = os.path.join(temp_dir, f"temp_{uuid.uuid4()}_{report.file_name}")
+        with open(temp_filepath, "wb") as f:
+            f.write(file_bytes)
+            
+        # Extract text
+        text = report_analyzer.extract_report_text(temp_filepath)
+        
+        # Cleanup
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+            
+        if not text.strip():
+            report.analysis_status = "Failed"
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="Unable to read report. Please upload a clearer file."
+            )
+            
+        # Analyze with Gemini
+        try:
+            analysis_result = report_analyzer.analyze_report_with_gemini(text)
+        except ValueError as val_err:
+            report.analysis_status = "Failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail=str(val_err))
+        except Exception as gemini_err:
+            report.analysis_status = "Failed"
+            db.commit()
+            raise HTTPException(
+                status_code=500,
+                detail="Analysis currently unavailable. Please try again later."
+            )
+            
+        # Enforce insufficient medical information check
+        abnormal = analysis_result.get("abnormal_findings", [])
+        normal = analysis_result.get("normal_findings", [])
+        summary_txt = analysis_result.get("summary", "")
+        if (not abnormal and not normal) or ("insufficient" in summary_txt.lower() or "no medical" in summary_txt.lower()):
+            report.analysis_status = "Failed"
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="Not enough medical information found."
+            )
+            
+        # Save analysis
+        health_score_before = calculate_health_score(current_user.id, db)
+        
+        existing_analysis = db.query(models.ReportAnalysis).filter(
+            models.ReportAnalysis.report_id == report.id
+        ).first()
+        
+        if existing_analysis:
+            existing_analysis.summary = analysis_result["summary"]
+            existing_analysis.abnormal_findings = analysis_result["abnormal_findings"]
+            existing_analysis.normal_findings = analysis_result["normal_findings"]
+            existing_analysis.recommendations = analysis_result["recommendations"]
+            existing_analysis.health_score_impact = analysis_result["health_score_impact"]
+            existing_analysis.gemini_response = analysis_result
+            db_analysis = existing_analysis
+        else:
+            db_analysis = models.ReportAnalysis(
+                report_id=report.id,
+                user_id=current_user.id,
+                summary=analysis_result["summary"],
+                abnormal_findings=analysis_result["abnormal_findings"],
+                normal_findings=analysis_result["normal_findings"],
+                recommendations=analysis_result["recommendations"],
+                health_score_impact=analysis_result["health_score_impact"],
+                gemini_response=analysis_result
+            )
+            db.add(db_analysis)
+            
+        report.analysis_status = "Completed"
+        db.commit()
+        db.refresh(db_analysis)
+        
+        # Calculate score after
+        health_score_after = calculate_health_score(current_user.id, db)
+        current_user.health_score = health_score_after
+        db.commit()
+        
+        return {
+            "analysis": schemas.ReportAnalysisResponse.model_validate(db_analysis).model_dump(),
+            "health_score_before": health_score_before,
+            "health_score_after": health_score_after
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        report.analysis_status = "Failed"
+        db.commit()
+        print(f"[Analyze Report Error]: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Analysis currently unavailable. Please try again later."
+        )
+
+@app.get("/api/reports/{report_id}/analysis", response_model=schemas.ReportAnalysisResponse)
+def get_report_analysis(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    analysis = db.query(models.ReportAnalysis).filter(
+        models.ReportAnalysis.report_id == report_id
+    ).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+        
+    return analysis
 
 # ================= NOTIFICATIONS ENDPOINTS =================
 

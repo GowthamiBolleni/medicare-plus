@@ -258,15 +258,30 @@ export const reportsAPI = {
     const response = await apiClient.get("/reports");
     return response.data;
   },
-  create: async (report) => {
-    const response = await apiClient.post("/reports", {
-      file_path: report.file_path || report.name || "report.pdf",
-      report_type: report.report_type || report.name || "Blood Test"
+  get: async (id) => {
+    const response = await apiClient.get(`/reports/${id}`);
+    return response.data;
+  },
+  upload: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await apiClient.post("/reports/upload", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
     });
     return response.data;
   },
   delete: async (id) => {
     const response = await apiClient.delete(`/reports/${id}`);
+    return response.data;
+  },
+  analyze: async (id) => {
+    const response = await apiClient.post(`/reports/${id}/analyze`);
+    return response.data;
+  },
+  getAnalysis: async (id) => {
+    const response = await apiClient.get(`/reports/${id}/analysis`);
     return response.data;
   }
 };

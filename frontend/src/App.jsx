@@ -25,6 +25,7 @@ import MedicalHistory from "./pages/MedicalHistory";
 import Family from "./pages/Family";
 import AIAssistant from "./pages/AIAssistant";
 import Emergency from "./pages/Emergency";
+import MedicalReports from "./pages/MedicalReports";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 
@@ -263,6 +264,7 @@ function AppContent() {
             <Route path="/health-tracker" element={<HealthTracker />} />
             <Route path="/bills-expenses" element={<BillsExpenses />} />
             <Route path="/medical-history" element={<MedicalHistory />} />
+            <Route path="/reports" element={<MedicalReports />} />
             <Route path="/family" element={<Family />} />
             <Route path="/ai-assistant" element={<AIAssistant />} />
             <Route path="/emergency" element={<Emergency />} />

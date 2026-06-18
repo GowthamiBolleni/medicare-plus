@@ -223,6 +223,47 @@ class ReportResponse(ReportBase):
     class Config:
         from_attributes = True
 
+# MedicalReport schemas
+class MedicalReportBase(BaseModel):
+    file_name: str
+    file_url: str
+    file_type: str
+    analysis_status: Optional[str] = "Pending"
+
+class MedicalReportCreate(MedicalReportBase):
+    pass
+
+class MedicalReportResponse(MedicalReportBase):
+    id: int
+    user_id: int
+    uploaded_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# ReportAnalysis schemas
+class ReportAnalysisBase(BaseModel):
+    summary: Optional[str] = None
+    abnormal_findings: Optional[List[str]] = []
+    normal_findings: Optional[List[str]] = []
+    recommendations: Optional[List[str]] = []
+    health_score_impact: int = 0
+    gemini_response: Optional[Any] = None
+
+class ReportAnalysisResponse(ReportAnalysisBase):
+    id: int
+    report_id: int
+    user_id: int
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class ReportAnalysisDetailResponse(BaseModel):
+    analysis: Optional[ReportAnalysisResponse] = None
+    health_score_before: int
+    health_score_after: int
+
 # Notification schemas
 class NotificationBase(BaseModel):
     message: str
@@ -270,6 +311,10 @@ class DashboardSummary(BaseModel):
     category_expenses: List[ExpenseCategorySum] = []
     family_contacts_count: int
     medical_conditions_count: int
+    total_reports_uploaded: int = 0
+    latest_report_date: Optional[str] = None
+    reports_requiring_attention: int = 0
+    abnormal_findings_count: int = 0
 
 # SOS schemas
 class SOSRequest(BaseModel):

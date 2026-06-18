@@ -13,6 +13,7 @@ import {
   BellRing,
   Users,
   FileClock,
+  FileText,
   X
 } from "lucide-react";
 import { Line, Bar } from "react-chartjs-2";
@@ -346,7 +347,7 @@ export default function Dashboard({ profile }) {
       </div>
 
       {/* Top Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
         {/* Card 1: Health Score */}
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-premium flex items-center gap-4 hover-glow smooth-hover min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emergency-50 flex items-center justify-center text-emergency-500 shrink-0">
@@ -448,6 +449,39 @@ export default function Dashboard({ profile }) {
             </div>
           </div>
         </div>
+
+        {/* Card 7: Medical Reports */}
+        <Link to="/reports" className="bg-white p-5 rounded-2xl border border-slate-100 shadow-premium flex items-center gap-4 hover-glow smooth-hover min-w-0 cursor-pointer">
+          <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-650 shrink-0">
+            <FileText className="w-5.5 h-5.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-sans truncate">Medical Reports</h3>
+            <div className="mt-1 space-y-0.5">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[9px] font-semibold text-slate-500 font-sans">Total</span>
+                <span className="text-xs font-bold text-slate-800 font-sans">{data.total_reports_uploaded ?? 0}</span>
+              </div>
+              {data.abnormal_findings_count > 0 && (
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[9px] font-medium text-emergency-500 font-sans">Abnormal</span>
+                  <span className="text-xs font-bold text-emergency-600 font-sans">{data.abnormal_findings_count}</span>
+                </div>
+              )}
+              {data.reports_requiring_attention > 0 && (
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[9px] font-medium text-amber-500 font-sans">Attention</span>
+                  <span className="text-xs font-bold text-amber-600 font-sans">{data.reports_requiring_attention}</span>
+                </div>
+              )}
+              {data.latest_report_date && (
+                <p className="text-[8px] text-slate-400 font-sans truncate mt-1">
+                  Latest: {data.latest_report_date}
+                </p>
+              )}
+            </div>
+          </div>
+        </Link>
       </div>
 
       {/* Middle Row Content */}

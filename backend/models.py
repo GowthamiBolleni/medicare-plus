@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date, JSON
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -33,6 +33,8 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     chat_history = relationship("ChatHistory", back_populates="user", cascade="all, delete-orphan")
     sos_logs = relationship("SOSLog", back_populates="user", cascade="all, delete-orphan")
+    medical_reports = relationship("MedicalReport", back_populates="user", cascade="all, delete-orphan")
+    analyses = relationship("ReportAnalysis", back_populates="user", cascade="all, delete-orphan")
 
 class Medicine(Base):
     __tablename__ = "medicines"
@@ -179,3 +181,34 @@ class SOSLog(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="sos_logs")
+
+class MedicalReport(Base):
+    __tablename__ = "medical_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    file_name = Column(String, nullable=False)
+    file_url = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
+    analysis_status = Column(String, default="Pending") # Pending, Completed, Failed
+
+    user = relationship("User", back_populates="medical_reports")
+    analysis = relationship("ReportAnalysis", back_populates="report", uselist=False, cascade="all, delete-orphan")
+
+class ReportAnalysis(Base):
+    __tablename__ = "report_analysis"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("medical_reports.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    summary = Column(String, nullable=True)
+    abnormal_findings = Column(JSON, nullable=True)
+    normal_findings = Column(JSON, nullable=True)
+    recommendations = Column(JSON, nullable=True)
+    health_score_impact = Column(Integer, default=0)
+    gemini_response = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="analyses")
+    report = relationship("MedicalReport", back_populates="analysis")
