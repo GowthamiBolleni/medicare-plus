@@ -55,6 +55,7 @@ class MedicineBase(BaseModel):
     category: Optional[str] = "Tablet"
     status: Optional[str] = "Upcoming"
     frequency: Optional[str] = "Everyday"
+    last_status_date: Optional[datetime.date] = None
 
 class MedicineCreate(MedicineBase):
     pass

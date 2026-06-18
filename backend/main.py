@@ -107,6 +107,12 @@ except Exception:
 
 try:
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE medicines ADD COLUMN last_status_date DATE"))
+except Exception:
+    pass
+
+try:
+    with engine.begin() as conn:
         conn.execute(text("ALTER TABLE medical_history ADD COLUMN condition VARCHAR"))
 except Exception:
     pass
@@ -572,10 +578,40 @@ def is_medicine_scheduled_on(med: models.Medicine, target_date: datetime.date) -
     scheduled_days = [d.strip().lower() for d in freq.split(",") if d.strip()]
     return weekday_target in scheduled_days
 
+def reset_medication_statuses_for_new_day(db: Session, user_id: Optional[int] = None):
+    local_today = datetime.datetime.now().date()
+    query = db.query(models.Medicine)
+    if user_id is not None:
+        query = query.filter(models.Medicine.user_id == user_id)
+    meds = query.all()
+    for med in meds:
+        if is_medicine_scheduled_on(med, local_today):
+            last_date = med.last_status_date
+            is_older = False
+            if last_date is None:
+                is_older = True
+            elif isinstance(last_date, str):
+                m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", last_date.strip())
+                if m:
+                    year, month, day = map(int, m.groups())
+                    parsed_last_date = datetime.date(year, month, day)
+                    is_older = parsed_last_date < local_today
+                else:
+                    is_older = True
+            elif isinstance(last_date, (datetime.date, datetime.datetime)):
+                parsed_last_date = last_date.date() if isinstance(last_date, datetime.datetime) else last_date
+                is_older = parsed_last_date < local_today
+                
+            if is_older:
+                med.status = "Upcoming"
+                med.last_status_date = local_today
+                db.commit()
+
 def check_medicine_reminders_job():
     db = Session(bind=engine)
     try:
         print("[Scheduler] Running check_medicine_reminders_job...")
+        reset_medication_statuses_for_new_day(db)
         now_utc = datetime.datetime.utcnow()
         local_now = datetime.datetime.now()
         start_of_today_utc = datetime.datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0)
@@ -627,6 +663,7 @@ def check_medicine_reminders_job():
                 # 2. Mark as Missed if today's time has passed the scheduled time by more than 1 minute
                 elif local_now > target_time_local + datetime.timedelta(minutes=1) and med.status == "Upcoming":
                     med.status = "Missed"
+                    med.last_status_date = local_now.date()
                     db.commit()
                     print(f"[Scheduler] Medicine {med.name} (User {med.user_id}) moved to Missed.")
 
@@ -673,6 +710,7 @@ def generate_automatic_notifications(db: Session, user_id: int):
     now_utc = datetime.datetime.utcnow()
     local_now = datetime.datetime.now()
     start_of_today_utc = datetime.datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0)
+    reset_medication_statuses_for_new_day(db, user_id)
     # 1. Medicine Reminders & Missed Alerts
     meds = db.query(models.Medicine).filter(
         models.Medicine.user_id == user_id,
@@ -717,6 +755,7 @@ def generate_automatic_notifications(db: Session, user_id: int):
             # If today's time is over for the medicine (past the scheduled time) and status is still "Upcoming"
             elif local_now > med_time_local and med.status == "Upcoming":
                 med.status = "Missed"
+                med.last_status_date = local_now.date()
                 db.commit()
                 
                 msg = f"Alert: You missed your {med.name} scheduled at {med.time}."
@@ -976,6 +1015,7 @@ def add_medicine(med: schemas.MedicineCreate, current_user: models.User = Depend
         category=med.category,
         status="Upcoming",
         frequency=med.frequency if med.frequency is not None else "Everyday",
+        last_status_date=datetime.datetime.now().date(),
         user_id=current_user.id
     )
     db.add(db_med)
@@ -995,6 +1035,7 @@ def update_medicine(med_id: int, med_update: schemas.MedicineUpdate, current_use
     
     if med_update.status is not None:
         db_med.status = med_update.status
+        db_med.last_status_date = datetime.datetime.now().date()
     if med_update.name is not None:
         db_med.name = med_update.name
     if med_update.dosage is not None:

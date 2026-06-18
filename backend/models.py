@@ -45,6 +45,7 @@ class Medicine(Base):
     category = Column(String, default="Tablet") # Tablet, Capsule, Syrup, etc.
     status = Column(String, default="Upcoming") # Taken, Upcoming, Missed
     frequency = Column(String, default="Everyday") # Everyday, Alternate Days, Specific days list
+    last_status_date = Column(Date, default=datetime.date.today)
     date_scheduled = Column(DateTime, default=datetime.datetime.utcnow)
     user_id = Column(Integer, ForeignKey("users.id"))
 
