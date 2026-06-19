@@ -283,6 +283,14 @@ export const reportsAPI = {
   getAnalysis: async (id) => {
     const response = await apiClient.get(`/reports/${id}/analysis`);
     return response.data;
+  },
+  chat: async (id, content) => {
+    const response = await apiClient.post(`/reports/${id}/chat`, { content });
+    return response.data;
+  },
+  getComparison: async () => {
+    const response = await apiClient.get("/reports/comparison");
+    return response.data;
   }
 };
 

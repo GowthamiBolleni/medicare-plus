@@ -229,6 +229,7 @@ class MedicalReportBase(BaseModel):
     file_url: str
     file_type: str
     analysis_status: Optional[str] = "Pending"
+    file_hash: Optional[str] = None
 
 class MedicalReportCreate(MedicalReportBase):
     pass
@@ -244,11 +245,32 @@ class MedicalReportResponse(MedicalReportBase):
 # ReportAnalysis schemas
 class ReportAnalysisBase(BaseModel):
     summary: Optional[str] = None
-    abnormal_findings: Optional[List[str]] = []
-    normal_findings: Optional[List[str]] = []
+    abnormal_findings: Optional[List[Any]] = []
+    normal_findings: Optional[List[Any]] = []
     recommendations: Optional[List[str]] = []
     health_score_impact: int = 0
     gemini_response: Optional[Any] = None
+
+    # New upgraded columns
+    patient_name: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    report_date: Optional[str] = None
+    lab_name: Optional[str] = None
+    report_type: Optional[str] = None
+    ocr_confidence: Optional[int] = None
+    analysis_confidence: Optional[int] = None
+    confidence_level: Optional[str] = None
+    risk_level: Optional[str] = None
+    risk_score: Optional[int] = None
+    health_score_impact_breakdown: Optional[Any] = None
+    executive_summary: Optional[str] = None
+    key_findings: Optional[List[str]] = []
+    critical_findings: Optional[List[str]] = []
+    recommended_actions: Optional[List[str]] = []
+    follow_up_suggestions: Optional[List[str]] = []
+    next_review_date: Optional[str] = None
+    report_category: Optional[str] = None
 
 class ReportAnalysisResponse(ReportAnalysisBase):
     id: int

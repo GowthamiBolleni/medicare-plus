@@ -192,6 +192,7 @@ class MedicalReport(Base):
     file_type = Column(String, nullable=False)
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
     analysis_status = Column(String, default="Pending") # Pending, Completed, Failed
+    file_hash = Column(String, nullable=True)
 
     user = relationship("User", back_populates="medical_reports")
     analysis = relationship("ReportAnalysis", back_populates="report", uselist=False, cascade="all, delete-orphan")
@@ -209,6 +210,27 @@ class ReportAnalysis(Base):
     health_score_impact = Column(Integer, default=0)
     gemini_response = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Expanded Patient Info & Severity/Confidence/Risk fields
+    patient_name = Column(String, nullable=True)
+    patient_age = Column(Integer, nullable=True)
+    patient_gender = Column(String, nullable=True)
+    report_date = Column(String, nullable=True)
+    lab_name = Column(String, nullable=True)
+    report_type = Column(String, nullable=True)
+    ocr_confidence = Column(Integer, nullable=True)
+    analysis_confidence = Column(Integer, nullable=True)
+    confidence_level = Column(String, nullable=True)
+    risk_level = Column(String, nullable=True)
+    risk_score = Column(Integer, nullable=True)
+    health_score_impact_breakdown = Column(JSON, nullable=True)
+    executive_summary = Column(String, nullable=True)
+    key_findings = Column(JSON, nullable=True)
+    critical_findings = Column(JSON, nullable=True)
+    recommended_actions = Column(JSON, nullable=True)
+    follow_up_suggestions = Column(JSON, nullable=True)
+    next_review_date = Column(String, nullable=True)
+    report_category = Column(String, nullable=True)
 
     user = relationship("User", back_populates="analyses")
     report = relationship("MedicalReport", back_populates="analysis")

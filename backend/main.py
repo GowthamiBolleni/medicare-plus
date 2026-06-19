@@ -2,6 +2,7 @@ import os
 import datetime
 import re
 import uuid
+import json
 import pdfplumber
 import google.generativeai as genai
 from PIL import Image
@@ -76,6 +77,16 @@ def send_twilio_whatsapp(to_number: str, body: str):
     except Exception as e:
         print(f"[Twilio WhatsApp] Failed to send WhatsApp: {e}")
         return False
+
+def log_audit(user_id: int, action: str, details: str):
+    try:
+        os.makedirs("logs", exist_ok=True)
+        audit_filepath = "logs/audit.log"
+        with open(audit_filepath, "a", encoding="utf-8") as f:
+            timestamp = datetime.datetime.utcnow().isoformat()
+            f.write(f"[{timestamp}] User: {user_id} | Action: {action} | Details: {details}\n")
+    except Exception as e:
+        print(f"Audit log failed: {e}")
 
 # Dynamic DB Migration for last_sos_time column
 try:
@@ -159,6 +170,35 @@ try:
         conn.execute(text("UPDATE medical_history SET status = 'Active' WHERE status IS NULL"))
 except Exception as e:
     print(f"Data migration failed: {e}")
+
+# Dynamic DB Migration for Upgraded AI Medical Report features
+for query in [
+    "ALTER TABLE medical_reports ADD COLUMN file_hash VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN patient_name VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN patient_age INTEGER",
+    "ALTER TABLE report_analysis ADD COLUMN patient_gender VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN report_date VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN lab_name VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN report_type VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN ocr_confidence INTEGER",
+    "ALTER TABLE report_analysis ADD COLUMN analysis_confidence INTEGER",
+    "ALTER TABLE report_analysis ADD COLUMN confidence_level VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN risk_level VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN risk_score INTEGER",
+    "ALTER TABLE report_analysis ADD COLUMN health_score_impact_breakdown JSON",
+    "ALTER TABLE report_analysis ADD COLUMN executive_summary TEXT",
+    "ALTER TABLE report_analysis ADD COLUMN key_findings JSON",
+    "ALTER TABLE report_analysis ADD COLUMN critical_findings JSON",
+    "ALTER TABLE report_analysis ADD COLUMN recommended_actions JSON",
+    "ALTER TABLE report_analysis ADD COLUMN follow_up_suggestions JSON",
+    "ALTER TABLE report_analysis ADD COLUMN next_review_date VARCHAR",
+    "ALTER TABLE report_analysis ADD COLUMN report_category VARCHAR"
+]:
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(query))
+    except Exception:
+        pass
 
 # Initialize slowapi Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -3253,6 +3293,19 @@ async def upload_report(
             detail="File size exceeds the 10 MB limit."
         )
 
+    # Calculate SHA256 file hash for duplicate detection
+    import hashlib
+    file_hash = hashlib.sha256(contents).hexdigest()
+    duplicate_report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.file_hash == file_hash,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if duplicate_report:
+        raise HTTPException(
+            status_code=400,
+            detail="This exact report file has already been uploaded."
+        )
+
     # Sanitize name and upload to Supabase Storage
     unique_filename = f"{uuid.uuid4()}{ext}"
     storage_path = f"{current_user.id}/{unique_filename}"
@@ -3279,12 +3332,130 @@ async def upload_report(
         file_name=file.filename,
         file_url=file_url,
         file_type=file_type,
-        analysis_status="Pending"
+        analysis_status="Pending",
+        file_hash=file_hash
     )
     db.add(db_report)
     db.commit()
     db.refresh(db_report)
+    
+    # Audit logging
+    log_audit(current_user.id, "UPLOAD", f"Uploaded report: {file.filename} (ID: {db_report.id}, Hash: {file_hash})")
+    
     return db_report
+
+@app.get("/api/reports/comparison")
+def get_reports_comparison(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    reports = db.query(models.MedicalReport).filter(
+        models.MedicalReport.user_id == current_user.id,
+        models.MedicalReport.analysis_status == "Completed"
+    ).all()
+    
+    analyzed_reports = []
+    for r in reports:
+        if r.analysis:
+            analyzed_reports.append(r.analysis)
+            
+    # Try parsing dates for sorting, fallback to created_at
+    def get_date_key(analysis):
+        try:
+            return datetime.datetime.strptime(analysis.report_date, "%d-%b-%Y")
+        except Exception:
+            try:
+                return datetime.datetime.strptime(analysis.report_date, "%Y-%m-%d")
+            except Exception:
+                return analysis.created_at
+                
+    analyzed_reports.sort(key=get_date_key)
+    
+    timeline = []
+    for a in analyzed_reports:
+        findings = (a.abnormal_findings or []) + (a.normal_findings or [])
+        
+        hemo = None
+        vitd = None
+        sugar = None
+        bp = None
+        
+        for f in findings:
+            if not isinstance(f, dict):
+                continue
+            param = f.get("parameter", "").lower()
+            res = f.get("result", "")
+            # Remove non-numeric characters for plotting
+            val_match = re.search(r"(\d+(\.\d+)?)", str(res))
+            val = float(val_match.group(1)) if val_match else None
+            
+            if "hemoglobin" in param:
+                hemo = val
+            elif "vitamin d" in param:
+                vitd = val
+            elif "sugar" in param or "glucose" in param:
+                sugar = val
+            elif "blood pressure" in param or "bp" in param:
+                bp = str(res)
+                
+        timeline.append({
+            "report_id": a.report_id,
+            "report_date": a.report_date,
+            "patient_name": a.patient_name,
+            "hemoglobin": hemo,
+            "vitamin_d": vitd,
+            "blood_sugar": sugar,
+            "blood_pressure": bp,
+            "health_score": 100 + a.health_score_impact
+        })
+        
+    trends = {"hemoglobin": "Stable", "vitamin_d": "Stable", "blood_sugar": "Stable", "blood_pressure": "Stable"}
+    
+    def check_trend_dir(values, higher_is_better=True):
+        valid_vals = [v for v in values if v is not None]
+        if len(valid_vals) < 2:
+            return "Stable"
+        diff = valid_vals[-1] - valid_vals[0]
+        if abs(diff) < 0.05 * valid_vals[0]:
+            return "Stable"
+        if diff > 0:
+            return "Improved" if higher_is_better else "Worsened"
+        else:
+            return "Worsened" if higher_is_better else "Improved"
+            
+    trends["hemoglobin"] = check_trend_dir([t["hemoglobin"] for t in timeline], higher_is_better=True)
+    trends["vitamin_d"] = check_trend_dir([t["vitamin_d"] for t in timeline], higher_is_better=True)
+    trends["blood_sugar"] = check_trend_dir([t["blood_sugar"] for t in timeline], higher_is_better=False)
+    
+    bp_systolics = []
+    for t in timeline:
+        if t["blood_pressure"]:
+            sys_match = re.search(r"(\d+)", t["blood_pressure"])
+            if sys_match:
+                bp_systolics.append(int(sys_match.group(1)))
+    trends["blood_pressure"] = check_trend_dir(bp_systolics, higher_is_better=False)
+    
+    comparison_summary = "Not enough reports to compare."
+    if len(timeline) >= 2:
+        prompt = f"""
+You are the MediCare+ AI Assistant. Compare the user's historical medical report findings over time.
+Timeline Data:
+{json.dumps(timeline, indent=2)}
+
+Provide a patient-friendly 2-3 sentence overview summary of how their key vitals (Hemoglobin, Vitamin D, Blood Sugar, Blood Pressure) are trending (e.g. improved, worsened, stable). Do not mention specific array indexes, refer only to report dates and trends.
+"""
+        try:
+            comparison_summary = ai_service.ask_ai(prompt).strip()
+        except Exception:
+            comparison_summary = "Trends analysis currently unavailable."
+    elif len(timeline) == 1:
+        comparison_summary = "Upload more reports to see trends and comparisons over time."
+        
+    return {
+        "timeline": timeline,
+        "trends": trends,
+        "summary": comparison_summary
+    }
 
 @app.get("/api/reports/{report_id}", response_model=schemas.MedicalReportResponse)
 def get_report_details(
@@ -3327,6 +3498,9 @@ def delete_report(
     new_score = calculate_health_score(current_user.id, db)
     current_user.health_score = new_score
     db.commit()
+    
+    # Audit logging
+    log_audit(current_user.id, "DELETE", f"Deleted report ID: {report_id} (Name: {report.file_name})")
     
     return {"message": "Report deleted successfully"}
 
@@ -3399,6 +3573,21 @@ async def analyze_report(
                 detail="Not enough medical information found."
             )
             
+        # Enforce duplicate checking of patient_name + report_date
+        duplicate_analysis = db.query(models.ReportAnalysis).filter(
+            models.ReportAnalysis.user_id == current_user.id,
+            models.ReportAnalysis.patient_name == analysis_result.get("patient_name"),
+            models.ReportAnalysis.report_date == analysis_result.get("report_date"),
+            models.ReportAnalysis.report_id != report.id
+        ).first()
+        if duplicate_analysis:
+            report.analysis_status = "Failed"
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"A report for patient '{analysis_result.get('patient_name')}' on date '{analysis_result.get('report_date')}' already exists."
+            )
+
         # Save analysis
         health_score_before = calculate_health_score(current_user.id, db)
         
@@ -3407,23 +3596,64 @@ async def analyze_report(
         ).first()
         
         if existing_analysis:
-            existing_analysis.summary = analysis_result["summary"]
-            existing_analysis.abnormal_findings = analysis_result["abnormal_findings"]
-            existing_analysis.normal_findings = analysis_result["normal_findings"]
-            existing_analysis.recommendations = analysis_result["recommendations"]
-            existing_analysis.health_score_impact = analysis_result["health_score_impact"]
+            existing_analysis.summary = analysis_result.get("summary")
+            existing_analysis.abnormal_findings = analysis_result.get("abnormal_findings")
+            existing_analysis.normal_findings = analysis_result.get("normal_findings")
+            existing_analysis.recommendations = analysis_result.get("recommendations")
+            existing_analysis.health_score_impact = analysis_result.get("health_score_impact")
             existing_analysis.gemini_response = analysis_result
+            
+            existing_analysis.patient_name = analysis_result.get("patient_name")
+            existing_analysis.patient_age = analysis_result.get("patient_age")
+            existing_analysis.patient_gender = analysis_result.get("patient_gender")
+            existing_analysis.report_date = analysis_result.get("report_date")
+            existing_analysis.lab_name = analysis_result.get("lab_name")
+            existing_analysis.report_type = analysis_result.get("report_type")
+            existing_analysis.ocr_confidence = analysis_result.get("ocr_confidence")
+            existing_analysis.analysis_confidence = analysis_result.get("analysis_confidence")
+            existing_analysis.confidence_level = analysis_result.get("confidence_level")
+            existing_analysis.risk_level = analysis_result.get("risk_level")
+            existing_analysis.risk_score = analysis_result.get("risk_score")
+            existing_analysis.health_score_impact_breakdown = analysis_result.get("health_score_impact_breakdown")
+            existing_analysis.executive_summary = analysis_result.get("executive_summary")
+            existing_analysis.key_findings = analysis_result.get("key_findings")
+            existing_analysis.critical_findings = analysis_result.get("critical_findings")
+            existing_analysis.recommended_actions = analysis_result.get("recommended_actions")
+            existing_analysis.follow_up_suggestions = analysis_result.get("follow_up_suggestions")
+            existing_analysis.next_review_date = analysis_result.get("next_review_date")
+            existing_analysis.report_category = analysis_result.get("report_category")
+            
             db_analysis = existing_analysis
         else:
             db_analysis = models.ReportAnalysis(
                 report_id=report.id,
                 user_id=current_user.id,
-                summary=analysis_result["summary"],
-                abnormal_findings=analysis_result["abnormal_findings"],
-                normal_findings=analysis_result["normal_findings"],
-                recommendations=analysis_result["recommendations"],
-                health_score_impact=analysis_result["health_score_impact"],
-                gemini_response=analysis_result
+                summary=analysis_result.get("summary"),
+                abnormal_findings=analysis_result.get("abnormal_findings"),
+                normal_findings=analysis_result.get("normal_findings"),
+                recommendations=analysis_result.get("recommendations"),
+                health_score_impact=analysis_result.get("health_score_impact"),
+                gemini_response=analysis_result,
+                
+                patient_name = analysis_result.get("patient_name"),
+                patient_age = analysis_result.get("patient_age"),
+                patient_gender = analysis_result.get("patient_gender"),
+                report_date = analysis_result.get("report_date"),
+                lab_name = analysis_result.get("lab_name"),
+                report_type = analysis_result.get("report_type"),
+                ocr_confidence = analysis_result.get("ocr_confidence"),
+                analysis_confidence = analysis_result.get("analysis_confidence"),
+                confidence_level = analysis_result.get("confidence_level"),
+                risk_level = analysis_result.get("risk_level"),
+                risk_score = analysis_result.get("risk_score"),
+                health_score_impact_breakdown = analysis_result.get("health_score_impact_breakdown"),
+                executive_summary = analysis_result.get("executive_summary"),
+                key_findings = analysis_result.get("key_findings"),
+                critical_findings = analysis_result.get("critical_findings"),
+                recommended_actions = analysis_result.get("recommended_actions"),
+                follow_up_suggestions = analysis_result.get("follow_up_suggestions"),
+                next_review_date = analysis_result.get("next_review_date"),
+                report_category = analysis_result.get("report_category")
             )
             db.add(db_analysis)
             
@@ -3435,6 +3665,9 @@ async def analyze_report(
         health_score_after = calculate_health_score(current_user.id, db)
         current_user.health_score = health_score_after
         db.commit()
+        
+        # Audit logging
+        log_audit(current_user.id, "ANALYZE", f"Analyzed report ID: {report.id} (Category: {db_analysis.report_category}, Risk Level: {db_analysis.risk_level}, Score Impact: {db_analysis.health_score_impact})")
         
         return {
             "analysis": schemas.ReportAnalysisResponse.model_validate(db_analysis).model_dump(),
@@ -3472,6 +3705,58 @@ def get_report_analysis(
         raise HTTPException(status_code=404, detail="Analysis not found")
         
     return analysis
+
+@app.post("/api/reports/{report_id}/chat")
+def chat_about_report(
+    report_id: int,
+    payload: schemas.MessageCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    analysis = report.analysis
+    if not analysis:
+        raise HTTPException(status_code=400, detail="Report must be analyzed first before asking questions.")
+    
+    # Retrieve raw text if possible, or build context from analysis fields
+    raw_text_ctx = f"Report Patient Name: {analysis.patient_name}\n" \
+                   f"Report Date: {analysis.report_date}\n" \
+                   f"Executive Summary: {analysis.executive_summary}\n" \
+                   f"Abnormal Findings: {json.dumps(analysis.abnormal_findings)}\n" \
+                   f"Normal Findings: {json.dumps(analysis.normal_findings)}\n"
+                    
+    prompt = f"""
+You are the MediCare+ AI Medical Assistant. Answer the user's question about their specific medical report using the clinical context provided below.
+Rules:
+1. Provide patient-friendly, educational answers.
+2. Maintain clinical disclaimer and never diagnose.
+3. Be concise and precise.
+
+Clinical Context:
+{raw_text_ctx}
+
+User Question: {payload.content}
+"""
+    try:
+        reply = ai_service.ask_ai(prompt)
+        if not reply:
+            reply = "I'm sorry, I could not generate an answer right now. Please try again."
+    except Exception as e:
+        print(f"Error chatting about report: {e}")
+        reply = "Analysis chat currently unavailable. Please try again later."
+        
+    # Audit logging
+    log_audit(current_user.id, "CHAT", f"Chatted about report ID: {report_id} | Q: {payload.content[:50]}...")
+    
+    return {"role": "ai", "content": reply}
+
+# Comparison moved up to avoid conflict with path parameter /{report_id}
+
 
 # ================= NOTIFICATIONS ENDPOINTS =================
 
