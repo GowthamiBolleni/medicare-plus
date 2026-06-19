@@ -27,7 +27,8 @@ import {
   HelpCircle,
   FileDigit,
   BarChart3,
-  Calendar
+  Calendar,
+  Layers
 } from "lucide-react";
 import { reportsAPI } from "../api";
 import { Line } from "react-chartjs-2";
