@@ -226,7 +226,8 @@ for query in [
         print(f"[Migration] RAG/SOS query skipped: {e}")
 
 # Initialize slowapi Rate Limiter
-limiter = Limiter(key_func=get_remote_address)
+env_mode = os.getenv("ENV", "development")
+limiter = Limiter(key_func=get_remote_address, enabled=(env_mode != "test"))
 
 app = FastAPI(title="MediCare+ Medicine Reminder & Health Tracker API")
 app.state.limiter = limiter

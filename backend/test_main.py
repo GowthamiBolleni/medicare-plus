@@ -43,6 +43,20 @@ class TestMediCareApp(unittest.TestCase):
         self.client = TestClient(app)
         self.db = TestingSessionLocal()
         
+        # Start mocks for external services to prevent Hugging Face / Gemini network requests
+        from unittest.mock import patch, MagicMock
+        import numpy as np
+        
+        self.patcher_transformer = patch('sentence_transformers.SentenceTransformer')
+        self.mock_transformer_class = self.patcher_transformer.start()
+        self.mock_model = MagicMock()
+        self.mock_model.encode.return_value = np.zeros((1, 384), dtype='float32')
+        self.mock_transformer_class.return_value = self.mock_model
+        
+        self.patcher_ask_ai = patch('services.ai.ask_ai')
+        self.mock_ask_ai = self.patcher_ask_ai.start()
+        self.mock_ask_ai.return_value = "GENERAL_CHAT"
+        
         # Create a default test user
         self.hashed_pw = auth.get_password_hash("TestPass123!")
         self.default_user = models.User(
@@ -64,8 +78,10 @@ class TestMediCareApp(unittest.TestCase):
         # Generate token for default user
         self.token = auth.create_access_token(data={"sub": "testuser"})
         self.headers = {"Authorization": f"Bearer {self.token}"}
-
+ 
     def tearDown(self):
+        self.patcher_transformer.stop()
+        self.patcher_ask_ai.stop()
         self.db.close()
         Base.metadata.drop_all(bind=engine)
 
