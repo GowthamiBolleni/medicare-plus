@@ -29,8 +29,14 @@ from supabase import create_client, Client
 from services import report_analyzer, intent_router, rag_service, notification_service, pdf_service
 
 # Initialize Supabase client
-supabase_url = os.getenv("SUPABASE_URL", "https://riwyhlgutaqjrdcbfzok.supabase.co")
-supabase_key = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpd3lobGd1dGFxanJkY2Jmem9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTUwMTYsImV4cCI6MjA5NTYzMTAxNn0.qgPAN-8721WmrsapcoSJ6yksbv0lyyW_c2c_jh2KJsg")
+supabase_url = os.getenv("SUPABASE_URL")
+if not supabase_url or supabase_url.strip() == "":
+    supabase_url = "https://riwyhlgutaqjrdcbfzok.supabase.co"
+
+supabase_key = os.getenv("SUPABASE_KEY")
+if not supabase_key or supabase_key.strip() == "":
+    supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpd3lobGd1dGFxanJkY2Jmem9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTUwMTYsImV4cCI6MjA5NTYzMTAxNn0.qgPAN-8721WmrsapcoSJ6yksbv0lyyW_c2c_jh2KJsg"
+
 supabase_client: Client = create_client(supabase_url, supabase_key)
 
 Base.metadata.create_all(bind=engine)
