@@ -67,6 +67,7 @@ export default function MedicalReports() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [fileInputKey, setFileInputKey] = useState(Date.now());
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   // Upgraded Feature States
   const [activeTab, setActiveTab] = useState("reports"); // "reports" or "trends"
@@ -310,6 +311,26 @@ export default function MedicalReports() {
 
   const triggerPrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!selectedReport) return;
+    setDownloadingPDF(true);
+    try {
+      const data = await reportsAPI.downloadPDF(selectedReport.id);
+      const blob = new Blob([data], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `MediCare_Analysis_${selectedReport.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("PDF download failed:", err);
+      alert("Failed to download PDF report.");
+    } finally {
+      setDownloadingPDF(false);
+    }
   };
 
   // Vitals Chart Configurations
@@ -700,6 +721,18 @@ export default function MedicalReports() {
                   title="Print PDF Report"
                 >
                   <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={downloadingPDF}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 bg-white border border-slate-200 shadow-sm transition-all disabled:opacity-50"
+                  title="Download AI PDF Report"
+                >
+                  {downloadingPDF ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-rose-500" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-rose-500" />
+                  )}
                 </button>
                 <button
                   onClick={exportCSV}

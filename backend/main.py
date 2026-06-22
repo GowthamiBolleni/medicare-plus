@@ -26,7 +26,7 @@ import auth
 import services.ai as ai_service
 from database import engine, Base, get_db
 from supabase import create_client, Client
-from services import report_analyzer
+from services import report_analyzer, intent_router, rag_service, notification_service, pdf_service
 
 # Initialize Supabase client
 supabase_url = os.getenv("SUPABASE_URL", "https://riwyhlgutaqjrdcbfzok.supabase.co")
@@ -199,6 +199,31 @@ for query in [
             conn.execute(text(query))
     except Exception:
         pass
+
+# Dynamic DB Migration for new RAG embeddings and Twilio SOS details
+for query in [
+    "ALTER TABLE sos_logs ADD COLUMN latitude FLOAT",
+    "ALTER TABLE sos_logs ADD COLUMN longitude FLOAT",
+    "ALTER TABLE sos_logs ADD COLUMN nearest_hospital VARCHAR",
+    "ALTER TABLE sos_logs ADD COLUMN medical_conditions VARCHAR",
+    """
+    CREATE TABLE IF NOT EXISTS report_embeddings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        report_id INTEGER,
+        user_id INTEGER,
+        chunk_text TEXT NOT NULL,
+        embedding JSON NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (report_id) REFERENCES medical_reports (id),
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+    """
+]:
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(query))
+    except Exception as e:
+        print(f"[Migration] RAG/SOS query skipped: {e}")
 
 # Initialize slowapi Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -526,7 +551,8 @@ def debug_db():
 # ================= AUTHENTICATION =================
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse)
-def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, user_data: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user_data.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -564,7 +590,8 @@ def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 @app.post("/api/auth/login", response_model=schemas.Token)
-def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(
         models.User.username == login_data.username
     ).first()
@@ -606,6 +633,7 @@ def update_profile(profile_update: schemas.UserUpdate, current_user: models.User
     if profile_update.phone is not None:
         current_user.phone = profile_update.phone
     
+    db.add(current_user)
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -2513,355 +2541,8 @@ def send_chat_message(msg: schemas.MessageCreate, current_user: models.User = De
             ai_content = f"Since you mentioned fever, Paracetamol is commonly used for fever relief. Follow dosage instructions and consult a healthcare professional if symptoms persist.{disclaimer}"
             return save_chat_messages(db, current_user.id, msg.content, ai_content)
 
-    # 7. Classify Intent and Router
-    intent = classify_intent(msg.content)
-
-    if intent == "profile_weight":
-        weight = current_user.weight
-        if weight:
-            ai_content = f"Your current weight is {weight} kg."
-        else:
-            ai_content = "I don't have your weight logged in your profile."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "profile_height":
-        height = current_user.height
-        if height:
-            ai_content = f"Your height is {height} cm."
-        else:
-            ai_content = "I don't have your height logged in your profile."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "profile_bmi":
-        weight = current_user.weight
-        height = current_user.height
-        if not weight or not height:
-            ai_content = "I don't have your height and weight on file. Please update them in your profile."
-        else:
-            height_m = height / 100
-            bmi = weight / (height_m * height_m)
-            if bmi < 18.5:
-                range_desc = "falls within the underweight BMI range (< 18.5)"
-                advice = "Ensure you consume nutrient-rich foods and consult a nutritionist."
-            elif bmi < 25:
-                range_desc = "falls within the healthy BMI range (18.5–24.9)"
-                advice = "Maintain a balanced diet and regular exercise."
-            elif bmi < 30:
-                range_desc = "falls within the overweight BMI range (25–29.9)"
-                advice = "Focus on portion control, healthy eating habits, and physical activity."
-            else:
-                range_desc = "falls within the obese BMI range (>= 30)"
-                advice = "It is recommended to seek guidance from a medical practitioner for a personalized wellness plan."
-            
-            ai_content = f"Your BMI is {bmi:.1f}.\n\nThis {range_desc}.\n\n{advice}"
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "profile_summary":
-        weight_str = f"{current_user.weight} kg" if current_user.weight else "N/A"
-        height_str = f"{current_user.height} cm" if current_user.height else "N/A"
-        bmi_str = "N/A"
-        if current_user.weight and current_user.height:
-            h_m = current_user.height / 100
-            bmi_str = f"{current_user.weight / (h_m * h_m):.1f}"
-            
-        ai_content = (
-            "👤 Profile Summary\n\n"
-            f"Name: {current_user.full_name or 'Gowthami'}\n"
-            f"Age: {current_user.age or 23}\n"
-            f"Gender: {current_user.gender or 'Female'}\n\n"
-            f"Weight: {weight_str}\n"
-            f"Height: {height_str}\n"
-            f"BMI: {bmi_str}\n\n"
-            f"Health Score: {current_user.health_score or 82}/100"
-        )
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medicines_upcoming":
-        upcoming = db.query(models.Medicine).filter(
-            models.Medicine.user_id == current_user.id,
-            models.Medicine.status == "Upcoming"
-        ).all()
-        
-        # Sort chronologically by parsing time
-        def parse_time_helper(t):
-            try:
-                if "am" in t.lower() or "pm" in t.lower():
-                    return datetime.datetime.strptime(t.strip().upper(), "%I:%M %p").time()
-                else:
-                    return datetime.datetime.strptime(t.strip(), "%H:%M").time()
-            except Exception:
-                return datetime.time.max
-                
-        upcoming.sort(key=lambda x: parse_time_helper(x.time))
-        
-        if upcoming:
-            list_items = []
-            for m in upcoming:
-                list_items.append(f"• {m.name} - {m.time}")
-            ai_content = "Upcoming Medicines\n\n" + "\n".join(list_items)
-        else:
-            ai_content = "You have no upcoming medicines scheduled."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "profile_age":
-        age = current_user.age
-        if age:
-            ai_content = f"You are {age} years old."
-        else:
-            ai_content = "I don't have your age logged in your profile."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "health_summary":
-        ai_content = generate_health_summary(current_user, db)
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "health_insights":
-        weight = current_user.weight or 0
-        height = current_user.height or 0
-        bmi = 0
-        if height > 0:
-            bmi = round(weight / ((height / 100) ** 2), 1)
-            
-        vitals = db.query(models.HealthMetric).filter(models.HealthMetric.user_id == current_user.id).order_by(models.HealthMetric.date.desc()).limit(5).all()
-        meds = db.query(models.Medicine).filter(models.Medicine.user_id == current_user.id).all()
-        
-        score = 80
-        strengths = []
-        needs_attention = []
-        
-        if bmi > 0:
-            if 18.5 <= bmi < 25:
-                strengths.append("✓ Normal BMI")
-                score += 5
-            elif bmi < 18.5:
-                needs_attention.append("⚠ BMI is underweight. Consider nutritional counseling.")
-                score -= 5
-            else:
-                needs_attention.append("⚠ BMI indicates overweight. Consider regular exercise and diet control.")
-                score -= 5
-        else:
-            needs_attention.append("⚠ BMI data incomplete. Please log your height and weight.")
-            
-        systolics = [v.systolic_bp for v in vitals if v.systolic_bp is not None]
-        diastolics = [v.diastolic_bp for v in vitals if v.diastolic_bp is not None]
-        sugars = [v.blood_sugar for v in vitals if v.blood_sugar is not None]
-        
-        if systolics:
-            avg_sys = sum(systolics) / len(systolics)
-            avg_dia = sum(diastolics) / len(diastolics) if diastolics else 80
-            if avg_sys < 120 and avg_dia < 80:
-                strengths.append("✓ Normal blood pressure")
-                score += 5
-            elif 120 <= avg_sys < 130 and avg_dia < 80:
-                needs_attention.append("⚠ Elevated blood pressure")
-                score -= 2
-            else:
-                needs_attention.append("⚠ Blood pressure slightly elevated")
-                score -= 5
-        else:
-            needs_attention.append("⚠ No recent blood pressure logs")
-            
-        if sugars:
-            avg_sugar = sum(sugars) / len(sugars)
-            if 70 <= avg_sugar < 140:
-                strengths.append("✓ Normal blood sugar level")
-                score += 5
-            else:
-                needs_attention.append("⚠ Blood sugar levels fluctuating")
-                score -= 5
-        else:
-            needs_attention.append("⚠ No recent blood sugar logs")
-            
-        if meds:
-            taken_count = sum(1 for m in meds if m.status == "Taken")
-            total_count = len(meds)
-            if taken_count == total_count:
-                strengths.append("✓ Regular medication compliance (100%)")
-                score += 5
-            elif taken_count > 0:
-                strengths.append("✓ Partially taking medications")
-            else:
-                needs_attention.append("⚠ Medication schedule has upcoming pills to log")
-                
-        score = min(max(score, 30), 100)
-        strengths_str = "\n".join(strengths) if strengths else "None logged yet"
-        attention_str = "\n".join(needs_attention) if needs_attention else "None"
-        
-        ai_content = f"""📊 **MediCare+ Health Insights Dashboard**
-
-📈 **Health Score: {score}/100**
-
-**Strengths:**
-{strengths_str}
-
-**Needs Attention:**
-{attention_str}"""
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medicines_missed":
-        missed_meds = db.query(models.Medicine).filter(
-            models.Medicine.user_id == current_user.id,
-            models.Medicine.status == "Missed"
-        ).all()
-        if missed_meds:
-            med_list = "\n".join([f"- {m.name} ({m.dosage}) scheduled at {m.time}" for m in missed_meds])
-            ai_content = f"Here are your missed medications:\n{med_list}"
-        else:
-            ai_content = "You have no missed medications logged."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medicines_due_next":
-        medicines = db.query(models.Medicine).filter(
-            models.Medicine.user_id == current_user.id,
-            models.Medicine.status == "Upcoming"
-        ).all()
-        if medicines:
-            def parse_time_str(t_str: str):
-                t_str = t_str.strip().upper()
-                for fmt in ("%I:%M %p", "%I %p", "%H:%M", "%I:%M%p", "%I%p"):
-                    try:
-                        return datetime.datetime.strptime(t_str, fmt).time()
-                    except ValueError:
-                        pass
-                return datetime.time(23, 59)
-            medicines.sort(key=lambda m: parse_time_str(m.time))
-            next_med = medicines[0]
-            ai_content = f"Your next medicine is {next_med.name} at {next_med.time}."
-        else:
-            ai_content = "You have no upcoming medicines scheduled."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medicines_taken":
-        taken = db.query(models.Medicine).filter(
-            models.Medicine.user_id == current_user.id,
-            models.Medicine.status == "Taken"
-        ).all()
-        if taken:
-            med_list = "\n".join([f"• {m.name} - {m.time}" for m in taken])
-            ai_content = f"Medicines Taken Today:\n\n{med_list}"
-        else:
-            ai_content = "You have not taken any medicines today."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medicines":
-        meds = db.query(models.Medicine).filter(models.Medicine.user_id == current_user.id).all()
-        if meds:
-            med_list = "\n".join([f"- {m.name} ({m.dosage}) - {m.time} [Status: {m.status}]" for m in meds])
-            ai_content = f"Here is your active medication schedule retrieved from the database:\n{med_list}"
-        else:
-            ai_content = "You have no active medications scheduled."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "next_appointment":
-        appointments = db.query(models.Appointment).filter(
-            models.Appointment.user_id == current_user.id,
-            models.Appointment.status == "Upcoming"
-        ).all()
-        if appointments:
-            appointments.sort(key=lambda a: a.date)
-            next_appt = appointments[0]
-            
-            doc_name = next_appt.doctor.strip()
-            doc_name = doc_name.replace("Dr. Dr. ", "Dr. ").replace("Dr. Dr.", "Dr.")
-            if doc_name.startswith("Dr."):
-                doc_display = doc_name
-            else:
-                doc_display = f"Dr. {doc_name}"
-                
-            date_str = next_appt.date.strftime("%d-%b-%Y")
-            ai_content = f"Your next appointment is with {doc_display} at {next_appt.hospital} on {date_str} at {next_appt.time}."
-        else:
-            ai_content = "You have no upcoming appointments scheduled."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "appointments":
-        appts = db.query(models.Appointment).filter(models.Appointment.user_id == current_user.id).all()
-        if appts:
-            appt_list_items = []
-            for a in appts:
-                doc_name = a.doctor.strip()
-                doc_name = doc_name.replace("Dr. Dr. ", "Dr. ").replace("Dr. Dr.", "Dr.")
-                if not doc_name.startswith("Dr."):
-                    doc_display = f"Dr. {doc_name}"
-                else:
-                    doc_display = doc_name
-                appt_list_items.append(f"- {doc_display} ({a.specialty}) at {a.hospital} on {a.date} at {a.time} - Status: {a.status}")
-            appt_list = "\n".join(appt_list_items)
-            ai_content = f"Here are your upcoming appointments retrieved from the database:\n{appt_list}"
-        else:
-            ai_content = "You have no appointments scheduled."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "expenses":
-        expenses = db.query(models.Expense).filter(models.Expense.user_id == current_user.id).order_by(models.Expense.date.desc()).limit(10).all()
-        if expenses:
-            resp_str = "Here is the breakdown of your medical expenses and bills:\n\n"
-            for e in expenses:
-                date_str = e.date.strftime('%Y-%m-%d') if hasattr(e.date, 'strftime') else str(e.date)
-                resp_str += f"🏥 {e.hospital}\n\n📅 Date: {date_str}\n\n💰 Total: ₹{e.amount}\n\nServices:\n• {e.description or 'Medical Expense'} - ₹{e.amount}\n\n---\n\n"
-            ai_content = resp_str.strip("\n- ")
-        else:
-            ai_content = "You have no medical bills logged."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "family":
-        family = db.query(models.FamilyMember).filter(models.FamilyMember.user_id == current_user.id).all()
-        if family:
-            fam_list = "\n".join([f"- {f.name} ({f.relation}) - Phone: {f.phone}{' [Emergency Contact]' if f.is_emergency_contact else ''}" for f in family])
-            ai_content = f"Here are your emergency and family contacts:\n{fam_list}"
-        else:
-            ai_content = "You have no contacts logged."
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "medical_history":
-        histories = db.query(models.MedicalHistory).filter(models.MedicalHistory.user_id == current_user.id).order_by(models.MedicalHistory.diagnosis_date.desc()).limit(10).all()
-        if histories:
-            cond_list = "\n".join([f"- {h.condition} ({h.status})" for h in histories])
-            ai_content = f"Based on your medical history, you have the following health conditions:\n{cond_list}"
-        else:
-            ai_content = "Based on your medical history, you do not have any logged health conditions."
-        disclaimer = "\n\n*This information is for educational purposes only. Please consult a qualified healthcare professional for diagnosis and treatment.*"
-        ai_content += disclaimer
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "recommendations":
-        histories = db.query(models.MedicalHistory).filter(models.MedicalHistory.user_id == current_user.id).all()
-        conditions = "\n".join([f"- {h.condition} ({h.status})" for h in histories]) if histories else "None"
-        meds = db.query(models.Medicine).filter(models.Medicine.user_id == current_user.id).all()
-        med_list = "\n".join([f"- {m.name} ({m.dosage}) at {m.time}" for m in meds]) if meds else "None"
-        
-        prompt = f"""Patient Age: {current_user.age or 'N/A'}
-Weight: {current_user.weight or 'N/A'}
-Height: {current_user.height or 'N/A'}
-
-Medical Conditions:
-{conditions}
-
-Current Medicines:
-{med_list}
-
-Give personalized health recommendations."""
-        ai_content = get_gemini_response(prompt, "")
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    elif intent == "general_health":
-        vitals = db.query(models.HealthMetric).filter(models.HealthMetric.user_id == current_user.id).order_by(models.HealthMetric.date.desc()).limit(5).all()
-        vitals_str = ""
-        if vitals:
-            vitals_str = "\n".join([f"- Date {v.date}: BP: {v.systolic_bp or 'N/A'}/{v.diastolic_bp or 'N/A'} mmHg, HR: {v.heart_rate or 'N/A'} bpm, Blood Sugar: {v.blood_sugar or 'N/A'} mg/dl" for v in vitals])
-        else:
-            vitals_str = "No recent vitals logged."
-            
-        disclaimer = "\n\n*This information is for educational purposes only. Please consult a qualified healthcare professional for diagnosis and treatment.*"
-        
-        if "fever" in msg_content_lower or "headache" in msg_content_lower or "pain" in msg_content_lower or "sick" in msg_content_lower:
-            ai_content = f"I'm sorry to hear you're feeling unwell. A headache or fever could be due to physical exhaustion, stress, or a mild infection. Make sure to rest well and stay hydrated.{disclaimer}"
-        else:
-            ai_content = f"Based on your recent health vitals:\n{vitals_str}\n\nYour levels appear to be stable. Please continue monitoring and logging your vitals regularly.{disclaimer}"
-        return save_chat_messages(db, current_user.id, msg.content, ai_content)
-
-    # 12. General fallback (Call Gemini with Conversation Memory context)
-    # Load last 10 messages from ChatHistory
+    # 7. AI Intent Classification & RAG Routing
+    # Retrieve conversation history memory
     history_records = db.query(models.ChatHistory).filter(
         models.ChatHistory.user_id == current_user.id
     ).order_by(models.ChatHistory.timestamp.desc()).limit(10).all()
@@ -2874,17 +2555,11 @@ Give personalized health recommendations."""
         
     full_query = f"Conversation History:\n{history_context}\n\nCurrent User Message:\n{msg.content}"
     
-    intent_mapping = {
-        "medicines": "medicine",
-        "appointments": "appointment",
-        "expenses": "expense",
-        "reports": "reports",
-        "family": "family",
-        "medical_history": "medical_history",
-        "general_health": "health"
-    }
-    context_intent = intent_mapping.get(intent, intent)
-    context = compile_relevant_context(db, current_user, context_intent)
+    intent = intent_router.classify_intent(msg.content)
+    context = intent_router.get_intent_context(db, current_user, intent, msg.content)
+    
+    # Run audit log
+    log_audit(current_user.id, "CHAT", f"Intent: {intent} | Q: {msg.content[:50]}...")
     
     ai_content = get_gemini_response(full_query, context)
     return save_chat_messages(db, current_user.id, msg.content, ai_content)
@@ -2953,33 +2628,46 @@ def trigger_sos(
     ).all()
     contacts_sent = []
     
-    # Compose SMS
+    # Find nearest hospital using geopy
+    ambulance = find_nearest_hospital(lat, lon)
+    
+    # Retrieve patient's medical history
+    med_history = db.query(models.MedicalHistory).filter(
+        models.MedicalHistory.user_id == current_user.id
+    ).all()
+    active_conditions = [h.condition for h in med_history if h.status == "Active"]
+    conditions_str = ", ".join(active_conditions) if active_conditions else "None active"
+    
+    # Compose SMS body in upgraded format
     local_time = datetime.datetime.now()
     time_str = local_time.strftime("%d-%b-%Y %I:%M %p")
     maps_url = f"https://maps.google.com/?q={lat},{lon}"
     sms_body = (
         "🚨 EMERGENCY SOS ALERT\n\n"
-        f"Patient: {current_user.full_name}\n\n"
-        "An emergency SOS has been triggered.\n\n"
-        f"Location:\n{maps_url}\n\n"
-        "Please contact immediately.\n\n"
+        f"Patient: {current_user.full_name or 'Gowthami'}\n"
+        f"Age: {current_user.age or 'N/A'} | Gender: {current_user.gender or 'Female'}\n"
+        f"Active Medical Conditions: {conditions_str}\n\n"
+        f"GPS Location:\n{maps_url}\n\n"
+        f"Nearest Identified Hospital:\n{ambulance['hospital']} (Distance: {ambulance['distance']})\n\n"
         f"Time: {time_str}"
     )
     
     for member in emergency_contacts:
         if member.phone:
             formatted_p = format_phone(member.phone)
-            # Send real Twilio WhatsApp
-            sent_status = send_twilio_whatsapp(member.phone, sms_body)
-            status_tag = "Sent" if sent_status else "Failed"
+            # Send standard SMS & WhatsApp
+            sent_sms = notification_service.send_emergency_sms(member.phone, sms_body)
+            sent_wa = send_twilio_whatsapp(member.phone, sms_body)
+            status_tag = "Sent" if (sent_sms or sent_wa) else "Failed"
             contacts_sent.append(f"{member.name} ({member.relation}): {formatted_p} [{status_tag}]")
             
     # Add a fallback contact if no emergency contacts exist
     if not emergency_contacts:
         fallback_phone = "+919876543210"
         formatted_f = format_phone(fallback_phone)
-        sent_status = send_twilio_whatsapp(fallback_phone, sms_body)
-        status_tag = "Sent" if sent_status else "Failed"
+        sent_sms = notification_service.send_emergency_sms(fallback_phone, sms_body)
+        sent_wa = send_twilio_whatsapp(fallback_phone, sms_body)
+        status_tag = "Sent" if (sent_sms or sent_wa) else "Failed"
         contacts_sent.append(f"Emergency Dispatcher ({formatted_f}) [{status_tag}]")
         
     contacts_list = ", ".join(contacts_sent)
@@ -2989,7 +2677,11 @@ def trigger_sos(
         user_id=current_user.id,
         message=sms_body,
         sent_to=contacts_list,
-        status="TRIGGERED"
+        status="TRIGGERED",
+        latitude=lat,
+        longitude=lon,
+        nearest_hospital=ambulance["hospital"],
+        medical_conditions=conditions_str
     )
     db.add(sos_log)
     
@@ -3661,9 +3353,15 @@ async def analyze_report(
         db.commit()
         db.refresh(db_analysis)
         
+        try:
+            rag_service.index_report(db, report.id, current_user.id, text)
+        except Exception as rag_err:
+            print(f"[RAG Index Error] Failed to index report: {rag_err}")
+            
         # Calculate score after
         health_score_after = calculate_health_score(current_user.id, db)
         current_user.health_score = health_score_after
+        db.add(current_user)
         db.commit()
         
         # Audit logging
@@ -3684,6 +3382,32 @@ async def analyze_report(
             status_code=500,
             detail="Analysis currently unavailable. Please try again later."
         )
+
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/reports/{report_id}/download-pdf")
+def download_report_pdf(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    report = db.query(models.MedicalReport).filter(
+        models.MedicalReport.id == report_id,
+        models.MedicalReport.user_id == current_user.id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    analysis = report.analysis
+    if not analysis:
+        raise HTTPException(status_code=400, detail="Report must be analyzed first before generating PDF.")
+        
+    pdf_buffer = pdf_service.generate_report_pdf(analysis, report.file_name)
+    
+    headers = {
+        'Content-Disposition': f'attachment; filename="MediCare_Analysis_{report_id}.pdf"'
+    }
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 
 @app.get("/api/reports/{report_id}/analysis", response_model=schemas.ReportAnalysisResponse)
 def get_report_analysis(
@@ -3723,12 +3447,17 @@ def chat_about_report(
     if not analysis:
         raise HTTPException(status_code=400, detail="Report must be analyzed first before asking questions.")
     
+    # Retrieve RAG context chunks for this report
+    chunks = rag_service.retrieve_relevant_chunks(db, current_user.id, payload.content, top_k=4, report_id=report_id)
+    rag_ctx = "\n".join([c["chunk_text"] for c in chunks])
+    
     # Retrieve raw text if possible, or build context from analysis fields
     raw_text_ctx = f"Report Patient Name: {analysis.patient_name}\n" \
                    f"Report Date: {analysis.report_date}\n" \
                    f"Executive Summary: {analysis.executive_summary}\n" \
                    f"Abnormal Findings: {json.dumps(analysis.abnormal_findings)}\n" \
-                   f"Normal Findings: {json.dumps(analysis.normal_findings)}\n"
+                   f"Normal Findings: {json.dumps(analysis.normal_findings)}\n" \
+                   f"RAG Relevant Report Chunks:\n{rag_ctx}\n"
                     
     prompt = f"""
 You are the MediCare+ AI Medical Assistant. Answer the user's question about their specific medical report using the clinical context provided below.

@@ -35,6 +35,7 @@ class User(Base):
     sos_logs = relationship("SOSLog", back_populates="user", cascade="all, delete-orphan")
     medical_reports = relationship("MedicalReport", back_populates="user", cascade="all, delete-orphan")
     analyses = relationship("ReportAnalysis", back_populates="user", cascade="all, delete-orphan")
+    embeddings = relationship("ReportEmbedding", back_populates="user", cascade="all, delete-orphan")
 
 class Medicine(Base):
     __tablename__ = "medicines"
@@ -178,6 +179,10 @@ class SOSLog(Base):
     message = Column(String, nullable=False)
     sent_to = Column(String, nullable=False)
     status = Column(String, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    nearest_hospital = Column(String, nullable=True)
+    medical_conditions = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="sos_logs")
@@ -196,6 +201,7 @@ class MedicalReport(Base):
 
     user = relationship("User", back_populates="medical_reports")
     analysis = relationship("ReportAnalysis", back_populates="report", uselist=False, cascade="all, delete-orphan")
+    embeddings = relationship("ReportEmbedding", back_populates="report", cascade="all, delete-orphan")
 
 class ReportAnalysis(Base):
     __tablename__ = "report_analysis"
@@ -234,3 +240,16 @@ class ReportAnalysis(Base):
 
     user = relationship("User", back_populates="analyses")
     report = relationship("MedicalReport", back_populates="analysis")
+
+class ReportEmbedding(Base):
+    __tablename__ = "report_embeddings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("medical_reports.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    chunk_text = Column(String, nullable=False)
+    embedding = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="embeddings")
+    report = relationship("MedicalReport", back_populates="embeddings")

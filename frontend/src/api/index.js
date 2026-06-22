@@ -284,6 +284,12 @@ export const reportsAPI = {
     const response = await apiClient.get(`/reports/${id}/analysis`);
     return response.data;
   },
+  downloadPDF: async (id) => {
+    const response = await apiClient.get(`/reports/${id}/download-pdf`, {
+      responseType: "blob"
+    });
+    return response.data;
+  },
   chat: async (id, content) => {
     const response = await apiClient.post(`/reports/${id}/chat`, { content });
     return response.data;
