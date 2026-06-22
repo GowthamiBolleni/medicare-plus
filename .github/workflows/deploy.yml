@@ -65,12 +65,18 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git checkout -b build-error-branch || git checkout build-error-branch
+        echo "=== BACKEND BUILD LOG ===" > build_error.log
         if [ -f backend_build.log ]; then
-          cp backend_build.log build_error.log
-        elif [ -f frontend_build.log ]; then
-          cp frontend_build.log build_error.log
+          cat backend_build.log >> build_error.log
         else
-          echo "No logs found" > build_error.log
+          echo "No backend build log found" >> build_error.log
+        fi
+        echo "" >> build_error.log
+        echo "=== FRONTEND BUILD LOG ===" >> build_error.log
+        if [ -f frontend_build.log ]; then
+          cat frontend_build.log >> build_error.log
+        else
+          echo "No frontend build log found" >> build_error.log
         fi
         git add build_error.log
         git commit -m "chore: upload build logs for debugging"
