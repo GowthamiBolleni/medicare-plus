@@ -43,14 +43,33 @@ jobs:
     if: github.event_name == 'push'
     steps:
     - uses: actions/checkout@v3
+      with:
+        persist-credentials: true
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
     - name: Build Backend Docker Image
       run: |
-        docker build -t medicare-backend:latest ./backend
+        docker build -t medicare-backend:latest ./backend > backend_build.log 2>&1
 
     - name: Build Frontend Docker Image
       run: |
-        docker build -t medicare-frontend:latest ./frontend
+        docker build -t medicare-frontend:latest ./frontend > frontend_build.log 2>&1
+
+    - name: Push Build Logs on Failure
+      if: failure()
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git checkout -b build-error-branch || git checkout build-error-branch
+        if [ -f backend_build.log ]; then
+          cp backend_build.log build_error.log
+        elif [ -f frontend_build.log ]; then
+          cp frontend_build.log build_error.log
+        else
+          echo "No logs found" > build_error.log
+        fi
+        git add build_error.log
+        git commit -m "chore: upload build logs for debugging"
+        git push origin build-error-branch --force
