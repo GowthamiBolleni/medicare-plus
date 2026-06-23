@@ -8,15 +8,19 @@ import {
   Info, 
   FileText,
   Filter,
-  CheckCheck
+  CheckCheck,
+  Calendar,
+  ArrowUpDown
 } from "lucide-react";
-import { notificationsAPI } from "../api";
+import { notificationsAPI, medicinesAPI } from "../api";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
-  const [activeFilter, setActiveFilter] = useState("all"); // all, unread, read, medicine, sos, system
+  const [activeFilter, setActiveFilter] = useState("all"); // all, unread, read, medicine, sos, appointment, system
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sortOrder, setSortOrder] = useState("desc"); // desc, asc
+  const [actionStates, setActionStates] = useState({}); // id -> "taken" | "snoozed" | "dismissed"
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -47,7 +51,7 @@ export default function Notifications() {
     try {
       await notificationsAPI.markRead(id);
       setNotifications(prev => 
-        prev.map(item => item.id === id ? { ...item, read: true } : item)
+        prev.map(item => item.id === id ? { ...item, read: true, status: "Read" } : item)
       );
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
@@ -67,7 +71,7 @@ export default function Notifications() {
     try {
       const unreadList = notifications.filter(n => !n.read);
       await Promise.all(unreadList.map(n => notificationsAPI.markRead(n.id)));
-      setNotifications(prev => prev.map(item => ({ ...item, read: true })));
+      setNotifications(prev => prev.map(item => ({ ...item, read: true, status: "Read" })));
     } catch (err) {
       console.error("Failed to mark all as read:", err);
     }
@@ -83,14 +87,46 @@ export default function Notifications() {
     }
   };
 
+  const handleTakeMed = async (notifId, logId) => {
+    try {
+      await medicinesAPI.takeLog(logId);
+      setActionStates(prev => ({ ...prev, [notifId]: "taken" }));
+      await handleMarkRead(notifId);
+    } catch (err) {
+      console.error("Failed to mark medicine as taken:", err);
+    }
+  };
+
+  const handleSnoozeMed = async (notifId, logId) => {
+    try {
+      await medicinesAPI.snoozeLog(logId);
+      setActionStates(prev => ({ ...prev, [notifId]: "snoozed" }));
+      await handleMarkRead(notifId);
+    } catch (err) {
+      console.error("Failed to snooze medicine:", err);
+    }
+  };
+
+  const handleDismissMed = async (notifId, logId) => {
+    try {
+      await medicinesAPI.dismissLog(logId);
+      setActionStates(prev => ({ ...prev, [notifId]: "dismissed" }));
+      await handleMarkRead(notifId);
+    } catch (err) {
+      console.error("Failed to dismiss medicine:", err);
+    }
+  };
+
   const getIcon = (type) => {
     switch (type) {
       case "medicine":
         return <Pill className="h-5 w-5 text-rose-500" />;
       case "sos":
         return <AlertOctagon className="h-5 w-5 text-red-500 animate-pulse" />;
+      case "appointment":
+        return <Calendar className="h-5 w-5 text-blue-500" />;
       case "report":
-        return <FileText className="h-5 w-5 text-blue-500" />;
+        return <FileText className="h-5 w-5 text-violet-500" />;
       case "system":
       default:
         return <Info className="h-5 w-5 text-emerald-500" />;
@@ -109,6 +145,12 @@ export default function Notifications() {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const sortedNotifications = [...notifications].sort((a, b) => {
+    const dateA = new Date(a.created_at);
+    const dateB = new Date(b.created_at);
+    return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+  });
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 font-sans">
@@ -152,28 +194,44 @@ export default function Notifications() {
         </div>
       </div>
 
-      {/* Segmented Filter Bar */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 border border-slate-200/80 rounded-xl max-w-max">
-        {[
-          { id: "all", label: "All" },
-          { id: "unread", label: "Unread" },
-          { id: "read", label: "Read" },
-          { id: "medicine", label: "Medicines" },
-          { id: "sos", label: "SOS Alerts" },
-          { id: "system", label: "System" }
-        ].map(filter => (
+      {/* Filter and Sort Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Segmented Filter Bar */}
+        <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 border border-slate-200/80 rounded-xl">
+          {[
+            { id: "all", label: "All" },
+            { id: "unread", label: "Unread" },
+            { id: "read", label: "Read" },
+            { id: "medicine", label: "Medicine Reminders" },
+            { id: "sos", label: "SOS Alerts" },
+            { id: "appointment", label: "Appointment Reminders" },
+            { id: "system", label: "System Notifications" }
+          ].map(filter => (
+            <button
+              key={filter.id}
+              onClick={() => setActiveFilter(filter.id)}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition ${
+                activeFilter === filter.id 
+                  ? "bg-rose-500 text-white shadow-sm" 
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/40"
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sort Order Selector */}
+        <div className="flex items-center gap-2 self-end md:self-auto">
+          <span className="text-xs font-semibold text-slate-400 font-sans">Sort:</span>
           <button
-            key={filter.id}
-            onClick={() => setActiveFilter(filter.id)}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition ${
-              activeFilter === filter.id 
-                ? "bg-rose-500 text-white shadow-sm" 
-                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/40"
-            }`}
+            onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 rounded-xl transition shadow-sm font-sans"
           >
-            {filter.label}
+            <ArrowUpDown className="h-3.5 w-3.5 text-slate-500" />
+            {sortOrder === "desc" ? "Newest First" : "Oldest First"}
           </button>
-        ))}
+        </div>
       </div>
 
       {/* Notifications History List */}
@@ -189,7 +247,7 @@ export default function Notifications() {
             <div key={i} className="h-24 bg-slate-100 border border-slate-200 rounded-2xl animate-pulse" />
           ))}
         </div>
-      ) : notifications.length === 0 ? (
+      ) : sortedNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 bg-white border border-slate-100 shadow-sm rounded-2xl text-center space-y-4">
           <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-full text-slate-400">
             <Bell className="h-8 w-8" />
@@ -203,7 +261,7 @@ export default function Notifications() {
         </div>
       ) : (
         <div className="space-y-3">
-          {notifications.map(notif => (
+          {sortedNotifications.map(notif => (
             <div 
               key={notif.id}
               className={`flex gap-4 p-4 border rounded-2xl transition duration-200 ${
@@ -236,6 +294,39 @@ export default function Notifications() {
                 <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap break-words font-sans">
                   {notif.message}
                 </p>
+
+                {/* Interactive Medicine Log Buttons */}
+                {notif.type === "medicine" && notif.medicine_log_id && !notif.read && !actionStates[notif.id] && (
+                  <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleTakeMed(notif.id, notif.medicine_log_id)}
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition"
+                    >
+                      Mark Taken
+                    </button>
+                    <button
+                      onClick={() => handleSnoozeMed(notif.id, notif.medicine_log_id)}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm transition"
+                    >
+                      Snooze 10 Min
+                    </button>
+                    <button
+                      onClick={() => handleDismissMed(notif.id, notif.medicine_log_id)}
+                      className="px-3 py-1.5 bg-slate-500 hover:bg-slate-600 text-white text-xs font-bold rounded-lg shadow-sm transition"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
+                {/* Feedback state label */}
+                {actionStates[notif.id] && (
+                  <div className="mt-2 text-xs font-bold text-slate-500 italic flex items-center gap-1.5">
+                    {actionStates[notif.id] === "taken" && "✅ Marked as Taken"}
+                    {actionStates[notif.id] === "snoozed" && "⏰ Snoozed for 10 minutes"}
+                    {actionStates[notif.id] === "dismissed" && "❌ Dismissed"}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}

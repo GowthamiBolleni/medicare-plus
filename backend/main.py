@@ -39,6 +39,34 @@ if not supabase_key or supabase_key.strip() == "":
 
 supabase_client: Client = create_client(supabase_url, supabase_key)
 
+# Run startup SQLite migrations to ensure new tables/columns exist without breaking legacy DBs
+def run_sqlite_migrations():
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        # notification_history updates
+        try:
+            conn.execute(text("ALTER TABLE notification_history ADD COLUMN status VARCHAR DEFAULT 'Unread'"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE notification_history ADD COLUMN read_at TIMESTAMP"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE notification_history ADD COLUMN medicine_log_id INTEGER"))
+        except Exception:
+            pass
+        # users updates
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN adherence_score FLOAT DEFAULT 100.0"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN medicine_compliance_percentage FLOAT DEFAULT 100.0"))
+        except Exception:
+            pass
+
+run_sqlite_migrations()
 Base.metadata.create_all(bind=engine)
 
 def send_twilio_whatsapp(to_number: str, body: str):
@@ -740,7 +768,9 @@ def check_medicine_reminders_job():
         now_utc = datetime.datetime.utcnow()
         local_now = datetime.datetime.now()
         start_of_today_utc = datetime.datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0)
-        meds = db.query(models.Medicine).filter(models.Medicine.status == "Upcoming").all()
+        
+        # 1. Check master scheduled medicines to trigger reminders
+        meds = db.query(models.Medicine).all()
         for med in meds:
             if not is_medicine_scheduled_on(med, local_now.date()):
                 continue
@@ -752,15 +782,20 @@ def check_medicine_reminders_job():
                     target = datetime.datetime.strptime(time_str, "%H:%M")
                 hour = target.hour
                 minute = target.minute
-                target_time_local = datetime.datetime(local_now.year, local_now.month, local_now.day, hour, minute)
+                target_time_today = datetime.datetime(local_now.year, local_now.month, local_now.day, hour, minute)
             except Exception as e:
                 print(f"Invalid time format: {time_str}")
                 continue
 
             try:
-                # 1. Send reminder notification if within 60 seconds of scheduled time
-                time_diff = abs((local_now - target_time_local).total_seconds())
-                if time_diff <= 60:
+                # Check if we already created a log for today's scheduled time
+                log_exists = db.query(models.MedicineLog).filter(
+                    models.MedicineLog.medicine_id == med.id,
+                    models.MedicineLog.scheduled_time == target_time_today
+                ).first()
+
+                # Trigger reminder notification if local_now is close to/at scheduled time and no log exists yet
+                if not log_exists and target_time_today <= local_now <= target_time_today + datetime.timedelta(minutes=5):
                     # Check preferences
                     prefs = db.query(models.NotificationPreferences).filter(
                         models.NotificationPreferences.user_id == med.user_id
@@ -771,71 +806,135 @@ def check_medicine_reminders_job():
                         db.commit()
                         db.refresh(prefs)
                         
+                    # Create MedicineLog first
+                    new_log = models.MedicineLog(
+                        user_id=med.user_id,
+                        medicine_id=med.id,
+                        scheduled_time=target_time_today,
+                        taken_time=None,
+                        status="Upcoming",
+                        snooze_count=0,
+                        next_reminder_time=target_time_today
+                    )
+                    db.add(new_log)
+                    db.commit()
+                    db.refresh(new_log)
+
                     if prefs.medicine_reminders_enabled and prefs.push_notifications_enabled:
                         title = "💊 Medicine Reminder"
                         body = f"Medicine:\n{med.name}\n\nDosage:\n{med.dosage}\n\nTime:\n{med.time}\n\nPlease take your medication."
                         
-                        # Check duplicate
-                        exists = db.query(models.NotificationHistory).filter(
-                            models.NotificationHistory.user_id == med.user_id,
-                            models.NotificationHistory.title == title,
-                            models.NotificationHistory.message == body,
-                            models.NotificationHistory.created_at >= start_of_today_utc
-                        ).first()
+                        # Save to both history and legacy notifications
+                        create_notification_record(db, med.user_id, title, body, "medicine", medicine_log_id=new_log.id)
+                        print(f"[Scheduler] Medicine reminder created for {med.name} (User {med.user_id})")
                         
-                        if not exists:
-                            # Save to both history and legacy notifications
-                            create_notification_record(db, med.user_id, title, body, "medicine")
-                            print(f"[Scheduler] Medicine reminder created for {med.name} (User {med.user_id})")
+                        # Fetch user device tokens
+                        tokens = db.query(models.DeviceToken).filter(models.DeviceToken.user_id == med.user_id).all()
+                        token_list = [t.device_token for t in tokens if t.device_token]
+                        if token_list:
+                            fcm_service.send_multicast_fcm_notification(
+                                device_tokens=token_list,
+                                title=title,
+                                body=body,
+                                data={
+                                    "type": "medicine",
+                                    "medicine_id": str(med.id),
+                                    "medicine_log_id": str(new_log.id),
+                                    "action_taken": "mark_taken",
+                                    "action_snooze": "snooze",
+                                    "action_dismiss": "dismiss"
+                                }
+                            )
                             
-                            # Fetch user device tokens
-                            tokens = db.query(models.DeviceToken).filter(models.DeviceToken.user_id == med.user_id).all()
-                            token_list = [t.device_token for t in tokens if t.device_token]
-                            if token_list:
-                                fcm_service.send_multicast_fcm_notification(
-                                    device_tokens=token_list,
-                                    title=title,
-                                    body=body,
-                                    data={
-                                        "type": "medicine",
-                                        "medicine_id": str(med.id),
-                                        "action_taken": "mark_taken",
-                                        "action_dismiss": "dismiss"
-                                    }
-                                )
-                                
-                            # Send real Twilio WhatsApp reminder to user
-                            user = db.query(models.User).filter(models.User.id == med.user_id).first()
-                            if user and user.phone:
-                                sms_body = f"Medicare+ Reminder: It is time to take your medicine '{med.name}' ({med.dosage}) scheduled at {med.time}."
-                                send_twilio_whatsapp(user.phone, sms_body)
-
-                # 2. Mark as Missed if today's time has passed the scheduled time by more than 1 minute
-                elif local_now > target_time_local + datetime.timedelta(minutes=1) and med.status == "Upcoming":
-                    med.status = "Missed"
-                    med.last_status_date = local_now.date()
-                    db.commit()
-                    print(f"[Scheduler] Medicine {med.name} (User {med.user_id}) moved to Missed.")
-
-                    # Also create a missed alert notification if preferences allow
-                    prefs = db.query(models.NotificationPreferences).filter(
-                        models.NotificationPreferences.user_id == med.user_id
-                    ).first()
-                    if not prefs or (prefs.medicine_reminders_enabled and prefs.push_notifications_enabled):
-                        title = "💊 Missed Medicine Alert"
-                        body = f"You missed your {med.name} scheduled at {med.time}."
-                        exists = db.query(models.NotificationHistory).filter(
-                            models.NotificationHistory.user_id == med.user_id,
-                            models.NotificationHistory.title == title,
-                            models.NotificationHistory.message == body,
-                            models.NotificationHistory.created_at >= start_of_today_utc
-                        ).first()
-                        if not exists:
-                            create_notification_record(db, med.user_id, title, body, "medicine")
-                            print(f"[Scheduler] Missed alert notification created for {med.name} (User {med.user_id})")
+                        # Send real Twilio WhatsApp reminder to user
+                        user = db.query(models.User).filter(models.User.id == med.user_id).first()
+                        if user and user.phone:
+                            sms_body = f"Medicare+ Reminder: It is time to take your medicine '{med.name}' ({med.dosage}) scheduled at {med.time}."
+                            send_twilio_whatsapp(user.phone, sms_body)
 
             except Exception as e:
                 print(f"[Scheduler] Error processing medicine {med.id}: {e}")
+
+        # 2. Check snoozed logs that have hit their next reminder time
+        try:
+            snoozed_logs = db.query(models.MedicineLog).filter(
+                models.MedicineLog.status == "Snoozed",
+                models.MedicineLog.next_reminder_time <= local_now
+            ).all()
+            for log in snoozed_logs:
+                med = log.medicine
+                if not med:
+                    continue
+                
+                # Check preferences
+                prefs = db.query(models.NotificationPreferences).filter(
+                    models.NotificationPreferences.user_id == log.user_id
+                ).first()
+                if not prefs or (prefs.medicine_reminders_enabled and prefs.push_notifications_enabled):
+                    title = "💊 Medicine Reminder"
+                    body = f"Medicine:\n{med.name}\n\nDosage:\n{med.dosage}\n\nTime:\n{med.time} (Snooze {log.snooze_count} of 3)\n\nPlease take your medication."
+                    
+                    # Reset status to Upcoming so they can take actions on it
+                    log.status = "Upcoming"
+                    db.commit()
+                    
+                    create_notification_record(db, log.user_id, title, body, "medicine", medicine_log_id=log.id)
+                    print(f"[Scheduler] Snoozed medicine reminder dispatched for {med.name} (User {log.user_id})")
+                    
+                    # FCM
+                    tokens = db.query(models.DeviceToken).filter(models.DeviceToken.user_id == log.user_id).all()
+                    token_list = [t.device_token for t in tokens if t.device_token]
+                    if token_list:
+                        fcm_service.send_multicast_fcm_notification(
+                            device_tokens=token_list,
+                            title=title,
+                            body=body,
+                            data={
+                                "type": "medicine",
+                                "medicine_id": str(med.id),
+                                "medicine_log_id": str(log.id),
+                                "action_taken": "mark_taken",
+                                "action_snooze": "snooze",
+                                "action_dismiss": "dismiss"
+                            }
+                        )
+                    # SMS/WhatsApp
+                    user = db.query(models.User).filter(models.User.id == log.user_id).first()
+                    if user and user.phone:
+                        sms_body = f"Medicare+ Reminder: It is time to take your snoozed medicine '{med.name}' ({med.dosage}). Snooze {log.snooze_count}/3."
+                        send_twilio_whatsapp(user.phone, sms_body)
+        except Exception as e:
+            print(f"[Scheduler] Error checking snoozed logs: {e}")
+
+        # 3. Missed Medicine Detection (grace period check: 30 minutes)
+        try:
+            grace_limit = local_now - datetime.timedelta(minutes=30)
+            missed_logs = db.query(models.MedicineLog).filter(
+                models.MedicineLog.status.in_(["Upcoming", "Snoozed"]),
+                models.MedicineLog.scheduled_time < grace_limit
+            ).all()
+            for log in missed_logs:
+                log.status = "Missed"
+                db.commit()
+                
+                # Sync master status as fallback
+                if log.medicine:
+                    log.medicine.status = "Missed"
+                    log.medicine.last_status_date = local_now.date()
+                    db.commit()
+                
+                # Missed medicine notification
+                med_name = log.medicine.name if log.medicine else "Medicine"
+                title = "⚠ Missed Medication"
+                body = f"{med_name} was not marked as taken.\nPlease follow your prescribed schedule."
+                create_notification_record(db, log.user_id, title, body, "medicine", medicine_log_id=log.id)
+                print(f"[Scheduler] Medicine log {log.id} moved to Missed. Notification generated.")
+                
+                # Update health score and compliance statistics
+                update_user_adherence_stats(log.user_id, db)
+        except Exception as e:
+            print(f"[Scheduler] Error checking missed logs: {e}")
+
     except Exception as e:
         print(f"[Scheduler] Error in background job: {e}")
     finally:
@@ -966,27 +1065,28 @@ def generate_automatic_notifications(db: Session, user_id: int):
                 db.commit()
 
                 msg = f"Alert: You missed your appointment with {display_doctor} scheduled at {appt.time} on {parsed_date.strftime('%Y-%m-%d')}."
-                exists = db.query(models.Notification).filter(
-                    models.Notification.user_id == user_id,
-                    models.Notification.message == msg,
-                    models.Notification.created_at >= start_of_today_utc
+                exists = db.query(models.NotificationHistory).filter(
+                    models.NotificationHistory.user_id == user_id,
+                    models.NotificationHistory.message == msg,
+                    models.NotificationHistory.type == "appointment",
+                    models.NotificationHistory.created_at >= start_of_today_utc
                 ).first()
                 if not exists:
-                    db.add(models.Notification(message=msg, read=False, user_id=user_id, notification_type="appointment"))
-                    db.commit()
+                    create_notification_record(db, user_id, "📅 Missed Appointment", msg, "appointment")
             else:
                 # Compare date portion for tomorrow's reminder
                 time_diff = parsed_date - now_utc
                 if 0 <= time_diff.total_seconds() <= 86400:
                     msg = f"Appointment tomorrow with {display_doctor}"
-                    exists = db.query(models.Notification).filter(
-                        models.Notification.user_id == user_id,
-                        models.Notification.message == msg,
-                        models.Notification.created_at >= start_of_today_utc
+                    full_msg = f"Appointment tomorrow with {display_doctor} at {appt.time} ({appt.hospital})"
+                    exists = db.query(models.NotificationHistory).filter(
+                        models.NotificationHistory.user_id == user_id,
+                        models.NotificationHistory.message == full_msg,
+                        models.NotificationHistory.type == "appointment",
+                        models.NotificationHistory.created_at >= start_of_today_utc
                     ).first()
                     if not exists:
-                        db.add(models.Notification(message=msg, read=False, user_id=user_id, notification_type="appointment"))
-                        db.commit()
+                        create_notification_record(db, user_id, "📅 Appointment Reminder", full_msg, "appointment")
                         
                         user_obj = db.query(models.User).filter(models.User.id == user_id).first()
                         if user_obj and user_obj.phone:
@@ -1033,7 +1133,44 @@ def calculate_health_score(user_id: int, db: Session):
         if analysis.health_score_impact:
             score += analysis.health_score_impact
 
+    # Missed medicine penalty: -2 points per missed medicine log
+    missed_count = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == user_id,
+        models.MedicineLog.status == "Missed"
+    ).count()
+    score -= missed_count * 2
+
     return max(score, 0)
+
+def update_user_adherence_stats(user_id: int, db: Session):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return
+    
+    # Calculate adherence score / compliance percentage based on medicine logs
+    taken_count = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == user_id,
+        models.MedicineLog.status == "Taken"
+    ).count()
+    
+    missed_count = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == user_id,
+        models.MedicineLog.status == "Missed"
+    ).count()
+    
+    total = taken_count + missed_count
+    if total > 0:
+        compliance = (taken_count / total) * 100.0
+    else:
+        compliance = 100.0
+        
+    user.medicine_compliance_percentage = round(compliance, 1)
+    user.adherence_score = round(compliance, 1)
+    
+    # Recalculate and update health score
+    user.health_score = calculate_health_score(user_id, db)
+    db.commit()
+    db.refresh(user)
 
 # ================= DASHBOARD SUMMARY =================
 
@@ -1044,16 +1181,41 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
     # Trigger automatic notification updates
     generate_automatic_notifications(db, current_user.id)
     
-    # 1. Fetch Today's medicines to take
+    # 1. Fetch Today's medicines and logs to calculate compliance
     all_meds = db.query(models.Medicine).filter(
         models.Medicine.user_id == current_user.id
     ).all()
     local_now = datetime.datetime.now()
-    today_meds = [m for m in all_meds if is_medicine_scheduled_on(m, local_now.date())]
+    local_today = local_now.date()
+    today_meds = [m for m in all_meds if is_medicine_scheduled_on(m, local_today)]
     
-    taken_meds = len([m for m in today_meds if m.status == "Taken"])
-    total_meds = len(today_meds)
-    compliance_pct = (taken_meds / total_meds * 100) if total_meds > 0 else 100.0
+    start_of_today = datetime.datetime.combine(local_today, datetime.time.min)
+    end_of_today = datetime.datetime.combine(local_today, datetime.time.max)
+    today_logs = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == current_user.id,
+        models.MedicineLog.scheduled_time >= start_of_today,
+        models.MedicineLog.scheduled_time <= end_of_today
+    ).all()
+    
+    today_count = len(today_logs)
+    taken_logs_count = len([l for l in today_logs if l.status == "Taken"])
+    upcoming_logs_count = len([l for l in today_logs if l.status in ("Upcoming", "Snoozed")])
+    missed_logs_count = len([l for l in today_logs if l.status == "Missed"])
+    
+    adherence_pct = (taken_logs_count / today_count * 100.0) if today_count > 0 else 100.0
+    
+    medication_compliance = {
+        "today_count": today_count,
+        "taken": taken_logs_count,
+        "upcoming": upcoming_logs_count,
+        "missed": missed_logs_count,
+        "adherence": round(adherence_pct, 1)
+    }
+
+    # For legacy backward compatibility:
+    taken_meds = taken_logs_count
+    total_meds = today_count
+    compliance_pct = adherence_pct
 
     # 2. Calculate dynamic health score
     health_score = calculate_health_score(current_user.id, db)
@@ -1180,7 +1342,8 @@ def get_dashboard_summary(current_user: models.User = Depends(auth.get_current_u
         "total_reports_uploaded": total_reports_uploaded,
         "latest_report_date": latest_report_date,
         "reports_requiring_attention": reports_requiring_attention,
-        "abnormal_findings_count": abnormal_findings_count
+        "abnormal_findings_count": abnormal_findings_count,
+        "medication_compliance": medication_compliance
     }
 
 # ================= MEDICINES CRUD =================
@@ -1251,6 +1414,87 @@ def delete_medicine(med_id: int, current_user: models.User = Depends(auth.get_cu
     db.delete(db_med)
     db.commit()
     return {"message": "Medicine deleted successfully"}
+
+# ================= MEDICINE LOGS ENDPOINTS =================
+
+@app.post("/api/medicines/logs/{log_id}/take", response_model=schemas.MedicineLogResponse)
+def take_medicine_log(log_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    log = db.query(models.MedicineLog).filter(
+        models.MedicineLog.id == log_id,
+        models.MedicineLog.user_id == current_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Medicine log not found")
+        
+    log.status = "Taken"
+    log.taken_time = datetime.datetime.utcnow()
+    db.commit()
+    
+    # Generate "✅ Medicine Taken" confirmation notification
+    med_name = log.medicine.name if log.medicine else "Medicine"
+    title = "✅ Medicine Taken"
+    body = f"{med_name} marked as taken."
+    create_notification_record(db, current_user.id, title, body, "medicine")
+    
+    # Update adherence and health score
+    update_user_adherence_stats(current_user.id, db)
+    db.refresh(log)
+    return log
+
+@app.post("/api/medicines/logs/{log_id}/snooze", response_model=schemas.MedicineLogResponse)
+def snooze_medicine_log(log_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    log = db.query(models.MedicineLog).filter(
+        models.MedicineLog.id == log_id,
+        models.MedicineLog.user_id == current_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Medicine log not found")
+        
+    if log.status == "Taken":
+        raise HTTPException(status_code=400, detail="Cannot snooze a medicine that has already been taken")
+        
+    if log.snooze_count >= 3:
+        raise HTTPException(status_code=400, detail="Maximum snooze limit (3) reached")
+        
+    log.status = "Snoozed"
+    log.snooze_count += 1
+    log.next_reminder_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+    db.commit()
+    
+    # Recalculate stats/score in case status changed from Missed to Snoozed
+    update_user_adherence_stats(current_user.id, db)
+    db.refresh(log)
+    return log
+
+@app.post("/api/medicines/logs/{log_id}/dismiss", response_model=schemas.MedicineLogResponse)
+def dismiss_medicine_log(log_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    log = db.query(models.MedicineLog).filter(
+        models.MedicineLog.id == log_id,
+        models.MedicineLog.user_id == current_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Medicine log not found")
+        
+    log.status = "Missed"
+    db.commit()
+    
+    # Update adherence and health score
+    update_user_adherence_stats(current_user.id, db)
+    db.refresh(log)
+    return log
+
+@app.get("/api/medicines/logs/today", response_model=List[schemas.MedicineLogResponse])
+def get_today_medicine_logs(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    local_today = datetime.datetime.now().date()
+    start_of_today = datetime.datetime.combine(local_today, datetime.time.min)
+    end_of_today = datetime.datetime.combine(local_today, datetime.time.max)
+    
+    logs = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == current_user.id,
+        models.MedicineLog.scheduled_time >= start_of_today,
+        models.MedicineLog.scheduled_time <= end_of_today
+    ).all()
+    return logs
 
 # ================= APPOINTMENTS CRUD =================
 
@@ -3619,7 +3863,7 @@ def add_notification(notification: schemas.NotificationCreate, current_user: mod
 # ================= NEW NOTIFICATIONS UPGRADES ENDPOINTS =================
 from services import fcm_service
 
-def create_notification_record(db: Session, user_id: int, title: str, message: str, type: str):
+def create_notification_record(db: Session, user_id: int, title: str, message: str, type: str, medicine_log_id: Optional[int] = None):
     """Helper to save notification to both legacy and new history tables for full compatibility."""
     # Save to legacy notifications table
     notif_type = "general"
@@ -3647,10 +3891,15 @@ def create_notification_record(db: Session, user_id: int, title: str, message: s
         title=title,
         message=message,
         type=type,
-        read=False
+        read=False,
+        status="Unread",
+        created_at=datetime.datetime.utcnow(),
+        read_at=None,
+        medicine_log_id=medicine_log_id
     )
     db.add(new_notif)
     db.commit()
+    db.refresh(new_notif)
     return new_notif
 
 @app.post("/api/notifications/device-token", response_model=schemas.DeviceTokenResponse)

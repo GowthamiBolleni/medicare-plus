@@ -87,6 +87,17 @@ class TestNotificationsSystem(unittest.TestCase):
         self.db.commit()
         self.db.refresh(self.user)
 
+        # Add a mock HealthMetric to ensure calculate_health_score returns base score instead of 0
+        self.metric = models.HealthMetric(
+            user_id=self.user.id,
+            systolic_bp=120,
+            diastolic_bp=80,
+            heart_rate=72,
+            blood_sugar=100
+        )
+        self.db.add(self.metric)
+        self.db.commit()
+
         self.token = auth.create_access_token(data={"sub": "testnotifuser"})
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
@@ -284,11 +295,150 @@ class TestNotificationsSystem(unittest.TestCase):
             # Run scheduler reminders check
             check_medicine_reminders_job()
 
+        # Verify log record created in database
+        logs = self.db.query(models.MedicineLog).filter(models.MedicineLog.user_id == self.user.id).all()
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].status, "Upcoming")
+        self.assertEqual(logs[0].snooze_count, 0)
+
         # Verify reminders written to history table
         history = self.db.query(models.NotificationHistory).filter(models.NotificationHistory.user_id == self.user.id).all()
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0].title, "💊 Medicine Reminder")
         self.assertIn("Amoxicillin", history[0].message)
+        self.assertEqual(history[0].medicine_log_id, logs[0].id)
+
+    def test_medicine_log_interactive_actions_and_stats(self):
+        # 1. Create a medicine log to interact with
+        now_local = datetime.datetime.now()
+        med = models.Medicine(
+            id=2, user_id=self.user.id, name="Vitamin D", dosage="1 Tablet", time="08:00 AM", category="Tablet"
+        )
+        log = models.MedicineLog(
+            user_id=self.user.id, medicine_id=2, scheduled_time=now_local, status="Upcoming", snooze_count=0
+        )
+        self.db.add_all([med, log])
+        self.db.commit()
+
+        # 2. Take medicine via endpoint
+        response = self.client.post(f"/api/medicines/logs/{log.id}/take", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "Taken")
+        self.assertIsNotNone(data["taken_time"])
+
+        # Verify stats updated in DB
+        self.db.refresh(self.user)
+        self.assertEqual(self.user.adherence_score, 100.0)
+
+        # Verify confirmation notification created
+        notifs = self.db.query(models.NotificationHistory).filter(
+            models.NotificationHistory.user_id == self.user.id,
+            models.NotificationHistory.title == "✅ Medicine Taken"
+        ).all()
+        self.assertEqual(len(notifs), 1)
+
+        # 3. Create another log to snooze
+        log2 = models.MedicineLog(
+            user_id=self.user.id, medicine_id=2, scheduled_time=now_local, status="Upcoming", snooze_count=0
+        )
+        self.db.add(log2)
+        self.db.commit()
+
+        # Snooze log
+        response = self.client.post(f"/api/medicines/logs/{log2.id}/snooze", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        data2 = response.json()
+        self.assertEqual(data2["status"], "Snoozed")
+        self.assertEqual(data2["snooze_count"], 1)
+        self.assertIsNotNone(data2["next_reminder_time"])
+
+        # Snooze again
+        response = self.client.post(f"/api/medicines/logs/{log2.id}/snooze", headers=self.headers)
+        self.assertEqual(response.json()["snooze_count"], 2)
+
+        # Snooze third time
+        response = self.client.post(f"/api/medicines/logs/{log2.id}/snooze", headers=self.headers)
+        self.assertEqual(response.json()["snooze_count"], 3)
+
+        # Max snooze check (4th attempt should fail)
+        response = self.client.post(f"/api/medicines/logs/{log2.id}/snooze", headers=self.headers)
+        self.assertEqual(response.status_code, 400)
+
+        # 4. Dismiss log
+        log3 = models.MedicineLog(
+            user_id=self.user.id, medicine_id=2, scheduled_time=now_local, status="Upcoming", snooze_count=0
+        )
+        self.db.add(log3)
+        self.db.commit()
+
+        response = self.client.post(f"/api/medicines/logs/{log3.id}/dismiss", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "Missed")
+
+    def test_missed_medicine_grace_period_and_health_score(self):
+        # Create a log that was scheduled 31 minutes ago
+        past_time = datetime.datetime.now() - datetime.timedelta(minutes=31)
+        med = models.Medicine(
+            id=3, user_id=self.user.id, name="Metformin", dosage="1000mg", time="09:00 AM", category="Tablet"
+        )
+        log = models.MedicineLog(
+            user_id=self.user.id, medicine_id=3, scheduled_time=past_time, status="Upcoming", snooze_count=0
+        )
+        self.db.add_all([med, log])
+        self.db.commit()
+        log_id = log.id
+        user_id = self.user.id
+
+        # Save initial health score
+        initial_score = self.user.health_score
+
+        # Run scheduler checking job to trigger missed detection
+        with patch('main.Session', return_value=self.db), \
+             patch('main.engine', engine):
+            check_medicine_reminders_job()
+
+        # Verify log status moved to Missed
+        log = self.db.query(models.MedicineLog).filter(models.MedicineLog.id == log_id).first()
+        self.assertEqual(log.status, "Missed")
+
+        # Verify missed notification generated
+        notifs = self.db.query(models.NotificationHistory).filter(
+            models.NotificationHistory.user_id == user_id,
+            models.NotificationHistory.title == "⚠ Missed Medication"
+        ).all()
+        self.assertEqual(len(notifs), 1)
+
+        # Verify health score penalty applied (-2 points)
+        user = self.db.query(models.User).filter(models.User.id == user_id).first()
+        self.assertEqual(user.health_score, initial_score - 2)
+
+    def test_ai_compliance_query_routing(self):
+        from services.intent_router import classify_intent, get_intent_context
+        # Create some logs to verify context
+        med = models.Medicine(
+            id=4, user_id=self.user.id, name="Atorvastatin", dosage="10mg", time="10:00 PM", category="Tablet"
+        )
+        log1 = models.MedicineLog(
+            user_id=self.user.id, medicine_id=4, scheduled_time=datetime.datetime.now(), status="Taken", snooze_count=0
+        )
+        log2 = models.MedicineLog(
+            user_id=self.user.id, medicine_id=4, scheduled_time=datetime.datetime.now() - datetime.timedelta(days=1), status="Missed", snooze_count=0
+        )
+        self.db.add_all([med, log1, log2])
+        self.db.commit()
+
+        # Classify queries
+        self.mock_ai.return_value = "MISSED_MEDICINE_QUERY"
+        intent1 = classify_intent("Which medicines have I missed?")
+        self.assertEqual(intent1, "MISSED_MEDICINE_QUERY")
+
+        # Get intent context for missed medicines
+        context = get_intent_context(self.db, self.user, "MISSED_MEDICINE_QUERY", "Which medicines have I missed?")
+        import json
+        context_data = json.loads(context)
+        self.assertEqual(context_data["missed_details"]["missed_count"], 1)
+        self.assertEqual(context_data["missed_details"]["missed_medicines"][0]["name"], "Atorvastatin")
 
 if __name__ == "__main__":
     unittest.main()

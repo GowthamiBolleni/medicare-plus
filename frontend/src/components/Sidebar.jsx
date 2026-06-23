@@ -17,7 +17,7 @@ import {
   Settings
 } from "lucide-react";
 
-export default function Sidebar({ profile }) {
+export default function Sidebar({ profile, unreadCount }) {
   const location = useLocation();
 
   const menuItems = [
@@ -65,7 +65,12 @@ export default function Sidebar({ profile }) {
               }`}
             >
               <Icon className={`w-5 h-5 ${isActive ? "" : item.isEmergency ? "text-emergency-500" : "text-slate-400"}`} />
-              <span className="font-sans">{item.name}</span>
+              <span className="font-sans flex-1">{item.name}</span>
+              {item.name === "Notifications" && unreadCount > 0 && (
+                <span className="px-2 py-0.5 text-xs font-bold bg-rose-500 text-white rounded-full">
+                  {unreadCount}
+                </span>
+              )}
             </Link>
           );
         })}

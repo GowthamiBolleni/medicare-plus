@@ -347,7 +347,7 @@ export default function Dashboard({ profile }) {
       </div>
 
       {/* Top Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Card 1: Health Score */}
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-premium flex items-center gap-4 hover-glow smooth-hover min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emergency-50 flex items-center justify-center text-emergency-500 shrink-0">
@@ -450,6 +450,39 @@ export default function Dashboard({ profile }) {
             </div>
           </div>
         </Link>
+
+        {/* Card 6: Medication Compliance */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-premium flex flex-col gap-2.5 hover-glow smooth-hover min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+              <Pill className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-sans truncate">Compliance</h3>
+              <span className="text-lg font-bold text-slate-800 font-sans">
+                {data.medication_compliance?.adherence !== undefined ? `${data.medication_compliance.adherence}%` : "100%"}
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-1.5 gap-y-1 text-left border-t border-slate-50 pt-2 font-sans">
+            <div>
+              <span className="text-[8px] font-semibold text-slate-400 block leading-tight">Today's Meds</span>
+              <span className="text-xs font-bold text-slate-800">{data.medication_compliance?.today_count ?? 0}</span>
+            </div>
+            <div>
+              <span className="text-[8px] font-semibold text-emerald-500 block leading-tight">Taken</span>
+              <span className="text-xs font-bold text-emerald-600">{data.medication_compliance?.taken ?? 0}</span>
+            </div>
+            <div>
+              <span className="text-[8px] font-semibold text-indigo-500 block leading-tight">Upcoming</span>
+              <span className="text-xs font-bold text-indigo-650">{data.medication_compliance?.upcoming ?? 0}</span>
+            </div>
+            <div>
+              <span className="text-[8px] font-semibold text-rose-500 block leading-tight">Missed</span>
+              <span className="text-xs font-bold text-rose-600">{data.medication_compliance?.missed ?? 0}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Middle Row Content */}

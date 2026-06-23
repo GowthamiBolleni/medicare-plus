@@ -45,6 +45,7 @@ function AppContent() {
 
   // SMS Notification Toast State
   const [activeToast, setActiveToast] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const alertedMeds = useRef({});
   const notifiedIds = useRef({});
 
@@ -202,6 +203,9 @@ function AppContent() {
     const checkBackendNotifications = async () => {
       try {
         const res = await notificationsAPI.getAll();
+        const unreads = res.filter(n => !n.read).length;
+        setUnreadCount(unreads);
+
         res.forEach((notification) => {
           if (!notification.read && !notifiedIds.current[notification.id]) {
             notifiedIds.current[notification.id] = true;
@@ -249,7 +253,7 @@ function AppContent() {
     <div className="flex h-screen overflow-hidden bg-[#f4f6fe] animate-fade-in">
       {/* Desktop Sidebar (hidden on mobile) */}
       <div className="hidden lg:block shrink-0">
-        <Sidebar profile={profile} />
+        <Sidebar profile={profile} unreadCount={unreadCount} />
       </div>
 
       {/* Mobile Drawer Sidebar */}
@@ -273,7 +277,7 @@ function AppContent() {
             
             {/* Sidebar implementation cloned in mobile drawer */}
             <div className="flex-1 overflow-y-auto" onClick={closeMobileMenu}>
-              <Sidebar profile={profile} />
+              <Sidebar profile={profile} unreadCount={unreadCount} />
             </div>
           </div>
         </div>

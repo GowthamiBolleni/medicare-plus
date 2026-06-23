@@ -20,6 +20,8 @@ class User(Base):
     phone = Column(String, default="")
     last_sos_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    adherence_score = Column(Float, default=100.0)
+    medicine_compliance_percentage = Column(Float, default=100.0)
 
     # Relationships
     medicines = relationship("Medicine", back_populates="user", cascade="all, delete-orphan")
@@ -39,6 +41,7 @@ class User(Base):
     device_tokens = relationship("DeviceToken", back_populates="user", cascade="all, delete-orphan")
     notification_history_records = relationship("NotificationHistory", back_populates="user", cascade="all, delete-orphan")
     notification_preferences = relationship("NotificationPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    medicine_logs = relationship("MedicineLog", back_populates="user", cascade="all, delete-orphan")
 
 class Medicine(Base):
     __tablename__ = "medicines"
@@ -277,7 +280,10 @@ class NotificationHistory(Base):
     message = Column(String, nullable=False)
     type = Column(String, nullable=False)
     read = Column(Boolean, default=False)
+    status = Column(String, default="Unread")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    read_at = Column(DateTime, nullable=True)
+    medicine_log_id = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="notification_history_records")
 
@@ -294,3 +300,18 @@ class NotificationPreferences(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="notification_preferences", uselist=False)
+
+class MedicineLog(Base):
+    __tablename__ = "medicine_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    medicine_id = Column(Integer, ForeignKey("medicines.id"), nullable=False)
+    scheduled_time = Column(DateTime, nullable=False)
+    taken_time = Column(DateTime, nullable=True)
+    status = Column(String, default="Upcoming") # Upcoming, Taken, Missed, Snoozed
+    snooze_count = Column(Integer, default=0)
+    next_reminder_time = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="medicine_logs")
+    medicine = relationship("Medicine")

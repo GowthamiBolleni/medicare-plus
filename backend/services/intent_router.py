@@ -42,7 +42,8 @@ User Query: "{message}"
     try:
         raw_intent = ai_service.ask_ai(prompt).strip().upper()
         # Clean potential formatting wrapper
-        for intent in INTENTS:
+        # Sort INTENTS by length descending to match longer, more specific intents first
+        for intent in sorted(INTENTS, key=len, reverse=True):
             if intent in raw_intent:
                 return intent
     except Exception as e:
@@ -87,13 +88,24 @@ def handle_bmi_query(db: Session, user: models.User) -> dict:
 
 def handle_medicine_query(db: Session, user: models.User) -> dict:
     meds = db.query(models.Medicine).filter(models.Medicine.user_id == user.id).all()
+    logs = db.query(models.MedicineLog).filter(models.MedicineLog.user_id == user.id).all()
+    taken_logs = [l for l in logs if l.status == "Taken"]
+    missed_logs = [l for l in logs if l.status == "Missed"]
+    
     return {
         "medicines": [
             {
                 "name": m.name, "dosage": m.dosage, "instructions": m.instructions, 
                 "category": m.category, "status": m.status, "frequency": m.frequency
             } for m in meds
-        ]
+        ],
+        "adherence_statistics": {
+            "adherence_score": user.adherence_score,
+            "medicine_compliance_percentage": user.medicine_compliance_percentage,
+            "total_logged_doses": len(logs),
+            "taken_doses": len(taken_logs),
+            "missed_doses": len(missed_logs)
+        }
     }
 
 def handle_medicine_schedule_query(db: Session, user: models.User) -> dict:
@@ -106,15 +118,20 @@ def handle_medicine_schedule_query(db: Session, user: models.User) -> dict:
     return {"schedule": schedule}
 
 def handle_missed_medicine_query(db: Session, user: models.User) -> dict:
-    missed = db.query(models.Medicine).filter(
-        models.Medicine.user_id == user.id,
-        models.Medicine.status == "Missed"
+    missed_logs = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == user.id,
+        models.MedicineLog.status == "Missed"
     ).all()
     return {
-        "missed_count": len(missed),
+        "missed_count": len(missed_logs),
         "missed_medicines": [
-            {"name": m.name, "dosage": m.dosage, "time": m.time, "date": str(m.last_status_date)}
-            for m in missed
+            {
+                "name": l.medicine.name if l.medicine else "Medicine",
+                "dosage": l.medicine.dosage if l.medicine else "",
+                "scheduled_time": str(l.scheduled_time),
+                "status": "Missed"
+            }
+            for l in missed_logs
         ]
     }
 
@@ -205,10 +222,7 @@ def handle_emergency_query(db: Session, user: models.User) -> dict:
     }
 
 def handle_health_summary_query(db: Session, user: models.User) -> dict:
-    meds = handle_medicine_query(db, user).get("medicines", [])
-    meds_taken = len([m for m in meds if m["status"] == "Taken"])
-    meds_total = len(meds)
-    adherence = round((meds_taken / meds_total * 100), 1) if meds_total else 100.0
+    adherence = user.adherence_score if user.adherence_score is not None else 100.0
     
     apps = handle_appointment_query(db, user).get("appointments", [])
     apps_done = len([a for a in apps if a["status"] == "Completed"])
@@ -217,9 +231,30 @@ def handle_health_summary_query(db: Session, user: models.User) -> dict:
     
     history = db.query(models.MedicalHistory).filter(models.MedicalHistory.user_id == user.id).all()
     
+    # Also fetch today's medication log count, taken, upcoming, missed
+    local_today = datetime.datetime.now().date()
+    start_of_today = datetime.datetime.combine(local_today, datetime.time.min)
+    end_of_today = datetime.datetime.combine(local_today, datetime.time.max)
+    today_logs = db.query(models.MedicineLog).filter(
+        models.MedicineLog.user_id == user.id,
+        models.MedicineLog.scheduled_time >= start_of_today,
+        models.MedicineLog.scheduled_time <= end_of_today
+    ).all()
+    
+    today_taken = len([l for l in today_logs if l.status == "Taken"])
+    today_missed = len([l for l in today_logs if l.status == "Missed"])
+    today_upcoming = len([l for l in today_logs if l.status in ("Upcoming", "Snoozed")])
+    
     return {
         "health_score": user.health_score,
         "medicine_adherence_percent": adherence,
+        "medicine_compliance_percentage": user.medicine_compliance_percentage if user.medicine_compliance_percentage is not None else 100.0,
+        "today_medicines_summary": {
+            "total": len(today_logs),
+            "taken": today_taken,
+            "missed": today_missed,
+            "upcoming": today_upcoming
+        },
         "appointment_compliance_percent": compliance,
         "active_medical_conditions": [h.condition for h in history if h.status == "Active"]
     }

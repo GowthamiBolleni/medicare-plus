@@ -133,6 +133,22 @@ export const medicinesAPI = {
       medicine
     );
     return response.data;
+  },
+  takeLog: async (logId) => {
+    const response = await apiClient.post(`/medicines/logs/${logId}/take`);
+    return response.data;
+  },
+  snoozeLog: async (logId) => {
+    const response = await apiClient.post(`/medicines/logs/${logId}/snooze`);
+    return response.data;
+  },
+  dismissLog: async (logId) => {
+    const response = await apiClient.post(`/medicines/logs/${logId}/dismiss`);
+    return response.data;
+  },
+  getTodayLogs: async () => {
+    const response = await apiClient.get("/medicines/logs/today");
+    return response.data;
   }
 };
 

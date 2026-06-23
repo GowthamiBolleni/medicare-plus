@@ -314,6 +314,13 @@ class ExpenseCategorySum(BaseModel):
     category: str
     amount: float
 
+class MedicationCompliance(BaseModel):
+    today_count: int
+    taken: int
+    upcoming: int
+    missed: int
+    adherence: float
+
 # Dashboard summary schema
 class DashboardSummary(BaseModel):
     health_score: int
@@ -337,6 +344,7 @@ class DashboardSummary(BaseModel):
     latest_report_date: Optional[str] = None
     reports_requiring_attention: int = 0
     abnormal_findings_count: int = 0
+    medication_compliance: Optional[MedicationCompliance] = None
 
 # SOS schemas
 class SOSRequest(BaseModel):
@@ -366,7 +374,24 @@ class NotificationHistoryResponse(BaseModel):
     message: str
     type: str
     read: bool
+    status: str
     created_at: datetime.datetime
+    read_at: Optional[datetime.datetime] = None
+    medicine_log_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+# Medicine Log schemas
+class MedicineLogResponse(BaseModel):
+    id: int
+    user_id: int
+    medicine_id: int
+    scheduled_time: datetime.datetime
+    taken_time: Optional[datetime.datetime] = None
+    status: str
+    snooze_count: int
+    next_reminder_time: Optional[datetime.datetime] = None
 
     class Config:
         from_attributes = True
