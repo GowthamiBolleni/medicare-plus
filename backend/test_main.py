@@ -1,4 +1,9 @@
 import os
+import sys
+from unittest.mock import MagicMock
+# Mock sentence_transformers to avoid protobuf version conflicts with tensorflow
+sys.modules['sentence_transformers'] = MagicMock()
+
 import unittest
 import json
 import datetime
@@ -33,11 +38,12 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[database.get_db] = override_get_db
-
 class TestMediCareApp(unittest.TestCase):
     def setUp(self):
+        # Register dependency overrides
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[database.get_db] = override_get_db
+        
         # Create schema
         Base.metadata.create_all(bind=engine)
         self.client = TestClient(app)
@@ -84,6 +90,7 @@ class TestMediCareApp(unittest.TestCase):
         self.patcher_ask_ai.stop()
         self.db.close()
         Base.metadata.drop_all(bind=engine)
+        app.dependency_overrides.clear()
 
     # ================= 1. AUTHENTICATION TESTS =================
     def test_auth_register_and_login(self):

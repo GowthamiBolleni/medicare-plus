@@ -38,11 +38,12 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[database.get_db] = override_get_db
-
 class TestNotificationsSystem(unittest.TestCase):
     def setUp(self):
+        # Register dependency overrides
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[database.get_db] = override_get_db
+
         # Create tables
         Base.metadata.create_all(bind=engine)
         self.client = TestClient(app)
@@ -96,6 +97,7 @@ class TestNotificationsSystem(unittest.TestCase):
         self.patcher_fcm_multi.stop()
         self.db.close()
         Base.metadata.drop_all(bind=engine)
+        app.dependency_overrides.clear()
 
     def test_register_device_token(self):
         payload = {
