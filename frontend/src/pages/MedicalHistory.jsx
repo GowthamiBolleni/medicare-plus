@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { FileClock, Trash2, Plus, Calendar, ShieldCheck, HelpCircle, X } from "lucide-react";
 import { medicalHistoryAPI } from "../api";
 
@@ -16,6 +16,8 @@ export default function MedicalHistory() {
     notes: "",
   });
 
+  const modalRef = useRef(null);
+
   const loadRecords = async () => {
     try {
       setLoading(true);
@@ -31,6 +33,54 @@ export default function MedicalHistory() {
   useEffect(() => {
     loadRecords();
   }, []);
+
+  // Modal focus trap & ESC close
+  useEffect(() => {
+    if (!showModal) return;
+    const modalElement = modalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowModal(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showModal]);
 
   const handleAddRecord = async (e) => {
     e.preventDefault();
@@ -135,6 +185,7 @@ export default function MedicalHistory() {
 
               <button
                 onClick={() => handleDeleteRecord(rec.id)}
+                aria-label={`Remove medical history log for ${rec.condition}`}
                 className="px-4 py-2.5 rounded-xl border border-slate-100 hover:border-emergency-100 text-xs font-bold text-slate-400 hover:text-emergency-600 hover:bg-emergency-50/50 flex items-center justify-center gap-2 transition-all duration-200 shrink-0 self-start sm:self-center cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" /> Remove Log
@@ -147,18 +198,28 @@ export default function MedicalHistory() {
       {/* Add Record Modal Panel */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+          <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+            className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative"
+          >
+            <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              aria-label="Close modal"
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5 flex items-center justify-center"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Add Medical History</h3>
+            <h3 id="modal-title" className="text-lg font-bold text-slate-800 font-sans mb-5">Add Medical History</h3>
 
             <form onSubmit={handleAddRecord} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Condition</label>
+                <label htmlFor="condition" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Condition</label>
                 <input
+                  id="condition"
                   type="text"
                   placeholder="e.g., Diabetes"
                   value={newRec.condition}
@@ -169,8 +230,9 @@ export default function MedicalHistory() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Diagnosis Date</label>
+                  <label htmlFor="diagnosis_date" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Diagnosis Date</label>
                   <input
+                    id="diagnosis_date"
                     type="date"
                     value={newRec.diagnosis_date}
                     onChange={(e) => setNewRec({ ...newRec, diagnosis_date: e.target.value })}
@@ -179,8 +241,9 @@ export default function MedicalHistory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Status</label>
+                  <label htmlFor="status" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Status</label>
                   <select
+                    id="status"
                     value={newRec.status}
                     onChange={(e) => setNewRec({ ...newRec, status: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -192,8 +255,9 @@ export default function MedicalHistory() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Notes</label>
+                <label htmlFor="notes" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Notes</label>
                 <textarea
+                  id="notes"
                   placeholder="e.g., Taking insulin daily"
                   value={newRec.notes}
                   onChange={(e) => setNewRec({ ...newRec, notes: e.target.value })}

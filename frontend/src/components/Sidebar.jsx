@@ -78,7 +78,7 @@ export default function Sidebar({ profile, unreadCount }) {
 
       {/* User profile section */}
       <div className="p-4 border-t border-slate-50">
-        <Link to="/profile" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 smooth-hover cursor-pointer w-full">
+        <Link to="/profile" aria-label="View user profile" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 smooth-hover cursor-pointer w-full">
           <img
             src={profile?.profile_image || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop"}
             alt={profile?.full_name || "User"}

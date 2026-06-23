@@ -212,8 +212,9 @@ export default function Profile({ onLogout, onProfileUpdate }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Full Name</label>
+              <label htmlFor="fullName" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Full Name</label>
               <input
+                id="fullName"
                 type="text"
                 value={profile.full_name || ""}
                 onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
@@ -221,8 +222,9 @@ export default function Profile({ onLogout, onProfileUpdate }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Email Address</label>
+              <label htmlFor="email" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Email Address</label>
               <input
+                id="email"
                 type="email"
                 value={profile.email || ""}
                 disabled
@@ -233,8 +235,9 @@ export default function Profile({ onLogout, onProfileUpdate }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age</label>
+              <label htmlFor="age" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age</label>
               <input
+                id="age"
                 type="number"
                 value={profile.age || ""}
                 onChange={(e) => setProfile({ ...profile, age: parseInt(e.target.value) || 0 })}
@@ -242,8 +245,9 @@ export default function Profile({ onLogout, onProfileUpdate }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Gender</label>
+              <label htmlFor="gender" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Gender</label>
               <select
+                id="gender"
                 value={profile.gender || ""}
                 onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -258,8 +262,9 @@ export default function Profile({ onLogout, onProfileUpdate }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Mobile Number</label>
+              <label htmlFor="mobile" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Mobile Number</label>
               <input
+                id="mobile"
                 type="tel"
                 placeholder="e.g. +91 98765 43210"
                 value={profile.phone || ""}
@@ -275,10 +280,11 @@ export default function Profile({ onLogout, onProfileUpdate }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label htmlFor="weight" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                 <Weight className="w-3.5 h-3.5 text-slate-400" /> Body Weight (kg)
               </label>
               <input
+                id="weight"
                 type="number"
                 step="0.1"
                 value={profile.weight || ""}
@@ -287,10 +293,11 @@ export default function Profile({ onLogout, onProfileUpdate }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label htmlFor="height" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                 <Ruler className="w-3.5 h-3.5 text-slate-400" /> Body Height (cm)
               </label>
               <input
+                id="height"
                 type="number"
                 step="0.1"
                 value={profile.height || ""}

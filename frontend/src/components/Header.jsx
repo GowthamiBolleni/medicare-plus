@@ -45,6 +45,7 @@ export default function Header({ toggleMobileMenu, profile }) {
       {/* Mobile navigation toggle */}
       <button
         onClick={toggleMobileMenu}
+        aria-label="Toggle mobile menu"
         className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl smooth-hover"
       >
         <Menu className="w-6 h-6" />
@@ -61,6 +62,7 @@ export default function Header({ toggleMobileMenu, profile }) {
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
+            aria-label="Notifications"
             className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl smooth-hover border border-slate-100 relative"
           >
             <Bell className="w-5 h-5" />
@@ -109,6 +111,7 @@ export default function Header({ toggleMobileMenu, profile }) {
         {/* User photo - links to Profile view */}
         <Link 
           to="/profile" 
+          aria-label="View Profile"
           className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 smooth-hover hover:scale-105 cursor-pointer block"
         >
           <img

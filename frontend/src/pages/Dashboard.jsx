@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { Link } from "react-router-dom";
 import {
   Heart,
@@ -16,33 +16,18 @@ import {
   FileText,
   X
 } from "lucide-react";
-import { Line, Bar } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from "chart.js";
-import { dashboardAPI, medicinesAPI, notificationsAPI } from "../api";
+const BPChart = React.lazy(() => import("../components/BPChart"));
+const ExpensesChart = React.lazy(() => import("../components/ExpensesChart"));
 
-// Register ChartJS modules
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+function ChartLoader() {
+  return (
+    <div className="h-[140px] flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-slate-200 border-t-brand-600 rounded-full animate-spin"></div>
+    </div>
+  );
+}
+
+import { dashboardAPI, medicinesAPI, notificationsAPI } from "../api";
 
 const parseSOSMessage = (msg) => {
   let hospital = "Apollo Hospital";
@@ -206,6 +191,56 @@ export default function Dashboard({ profile }) {
     }, 15000); // Poll every 15 seconds
     return () => clearInterval(interval);
   }, []);
+
+  const alertsModalRef = useRef(null);
+
+  useEffect(() => {
+    if (!showAllAlerts) return;
+    const modalElement = alertsModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowAllAlerts(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showAllAlerts]);
+
 
   const toggleMedicineTaken = async (id, currentStatus) => {
     const nextStatus = currentStatus === "Taken" ? "Upcoming" : "Taken";
@@ -562,6 +597,8 @@ export default function Dashboard({ profile }) {
                     src="https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?w=400&h=225&fit=crop"
                     alt="Hospital consult"
                     className="w-full h-full object-cover"
+                    loading="eager"
+                    fetchpriority="high"
                   />
                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2.5 py-1 rounded-lg text-[10px] font-bold text-brand-600 border border-slate-100 uppercase font-sans">
                     Cardio Check
@@ -630,7 +667,9 @@ export default function Dashboard({ profile }) {
           </div>
           <div className="h-44 flex flex-col justify-end">
             {metricsAvailable ? (
-              <Line data={bpChartData} options={chartOptions} />
+              <Suspense fallback={<ChartLoader />}>
+                <BPChart data={bpChartData} options={chartOptions} />
+              </Suspense>
             ) : (
               <div className="h-[140px] flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 border border-dashed border-slate-100 rounded-2xl">
                 <p className="text-xs font-bold text-slate-400 font-sans">No BP records logged yet.</p>
@@ -657,7 +696,9 @@ export default function Dashboard({ profile }) {
           </div>
           <div className="h-44 flex flex-col justify-end">
             {expensesAvailable || categoriesAvailable ? (
-              <Bar data={expensesChartData} options={barChartOptions} />
+              <Suspense fallback={<ChartLoader />}>
+                <ExpensesChart data={expensesChartData} options={barChartOptions} />
+              </Suspense>
             ) : (
               <div className="h-[140px] flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 border border-dashed border-slate-100 rounded-2xl">
                 <p className="text-xs font-bold text-slate-400 font-sans">No expenses logged yet.</p>
@@ -696,22 +737,29 @@ export default function Dashboard({ profile }) {
       </div>
 
       {showAllAlerts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          ref={alertsModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="alerts-modal-title"
+        >
           {/* Backdrop overlay */}
           <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 bg-transparent"
             onClick={() => setShowAllAlerts(false)}
           ></div>
           
           {/* Modal Container */}
           <div className="relative bg-white rounded-3xl p-6 shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto flex flex-col gap-4 animate-scale-up z-10">
             <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-              <h2 className="text-lg font-bold text-slate-800 font-sans">All Health Alerts</h2>
+              <h2 id="alerts-modal-title" className="text-lg font-bold text-slate-800 font-sans">All Health Alerts</h2>
               <button 
                 onClick={() => setShowAllAlerts(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500"
+                aria-label="Close alerts dialog"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
             

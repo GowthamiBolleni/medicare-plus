@@ -16,20 +16,30 @@ import Header from "./components/Header";
 import { authAPI, medicinesAPI, notificationsAPI } from "./api";
 
 // Pages
-import Dashboard from "./pages/Dashboard";
-import Medicines from "./pages/Medicines";
-import Appointments from "./pages/Appointments";
-import HealthTracker from "./pages/HealthTracker";
-import BillsExpenses from "./pages/BillsExpenses";
-import MedicalHistory from "./pages/MedicalHistory";
-import Family from "./pages/Family";
-import AIAssistant from "./pages/AIAssistant";
-import Emergency from "./pages/Emergency";
-import MedicalReports from "./pages/MedicalReports";
-import Profile from "./pages/Profile";
-import Login from "./pages/Login";
-import Notifications from "./pages/Notifications";
-import Settings from "./pages/Settings";
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const Medicines = React.lazy(() => import("./pages/Medicines"));
+const Appointments = React.lazy(() => import("./pages/Appointments"));
+const HealthTracker = React.lazy(() => import("./pages/HealthTracker"));
+const BillsExpenses = React.lazy(() => import("./pages/BillsExpenses"));
+const MedicalHistory = React.lazy(() => import("./pages/MedicalHistory"));
+const Family = React.lazy(() => import("./pages/Family"));
+const AIAssistant = React.lazy(() => import("./pages/AIAssistant"));
+const Emergency = React.lazy(() => import("./pages/Emergency"));
+const MedicalReports = React.lazy(() => import("./pages/MedicalReports"));
+const Profile = React.lazy(() => import("./pages/Profile"));
+const Login = React.lazy(() => import("./pages/Login"));
+const Notifications = React.lazy(() => import("./pages/Notifications"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+
+function PageLoader() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 animate-pulse">
+      <div className="w-10 h-10 border-4 border-slate-200 border-t-brand-600 rounded-full animate-spin"></div>
+      <p className="text-xs font-bold text-slate-400 font-sans tracking-wide">Loading page components...</p>
+    </div>
+  );
+}
+
 
 function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -270,8 +280,9 @@ function AppContent() {
               <button 
                 onClick={closeMobileMenu}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                aria-label="Close menu"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
             
@@ -290,21 +301,23 @@ function AppContent() {
 
         {/* View Router Main Viewport */}
         <main className="flex-1 overflow-y-auto pb-24 lg:pb-8">
-          <Routes>
-            <Route path="/" element={<Dashboard profile={profile} />} />
-            <Route path="/medicines" element={<Medicines profile={profile} onProfileUpdate={handleProfileUpdate} />} />
-            <Route path="/appointments" element={<Appointments />} />
-            <Route path="/health-tracker" element={<HealthTracker />} />
-            <Route path="/bills-expenses" element={<BillsExpenses />} />
-            <Route path="/medical-history" element={<MedicalHistory />} />
-            <Route path="/reports" element={<MedicalReports />} />
-            <Route path="/family" element={<Family />} />
-            <Route path="/ai-assistant" element={<AIAssistant />} />
-            <Route path="/emergency" element={<Emergency />} />
-            <Route path="/profile" element={<Profile onLogout={() => setIsAuthenticated(false)} onProfileUpdate={handleProfileUpdate} />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <React.Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Dashboard profile={profile} />} />
+              <Route path="/medicines" element={<Medicines profile={profile} onProfileUpdate={handleProfileUpdate} />} />
+              <Route path="/appointments" element={<Appointments />} />
+              <Route path="/health-tracker" element={<HealthTracker />} />
+              <Route path="/bills-expenses" element={<BillsExpenses />} />
+              <Route path="/medical-history" element={<MedicalHistory />} />
+              <Route path="/reports" element={<MedicalReports />} />
+              <Route path="/family" element={<Family />} />
+              <Route path="/ai-assistant" element={<AIAssistant />} />
+              <Route path="/emergency" element={<Emergency />} />
+              <Route path="/profile" element={<Profile onLogout={() => setIsAuthenticated(false)} onProfileUpdate={handleProfileUpdate} />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </React.Suspense>
         </main>
       </div>
 
@@ -320,8 +333,9 @@ function AppContent() {
                 key={item.name}
                 to={item.path}
                 className="w-12 h-12 rounded-full bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center -mt-6 shadow-md transition-all active:scale-95"
+                aria-label={item.name}
               >
-                <Icon className="w-6 h-6" />
+                <Icon className="w-6 h-6" aria-hidden="true" />
               </Link>
             );
           }
@@ -334,7 +348,7 @@ function AppContent() {
                 isActive ? "text-brand-600" : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <Icon className="w-5.5 h-5.5" />
+              <Icon className="w-5.5 h-5.5" aria-hidden="true" />
               <span className="text-[9px] font-bold font-sans tracking-wide">{item.name}</span>
             </Link>
           );
@@ -356,6 +370,7 @@ function AppContent() {
             <button
               onClick={() => setActiveToast(null)}
               className="text-slate-500 hover:text-slate-300 text-xs font-bold font-sans cursor-pointer transition-colors"
+              aria-label="Close simulated SMS notification"
             >
               ✕
             </button>

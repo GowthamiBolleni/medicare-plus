@@ -172,6 +172,9 @@ export default function Settings() {
                 </div>
                 <button 
                   onClick={() => handleToggle("medicine_reminders_enabled")}
+                  role="switch"
+                  aria-checked={prefs.medicine_reminders_enabled}
+                  aria-label="Medicine Reminders"
                   className={`w-11 h-6 rounded-full transition duration-200 relative shrink-0 ${
                     prefs.medicine_reminders_enabled ? "bg-rose-500" : "bg-slate-200"
                   }`}
@@ -195,6 +198,9 @@ export default function Settings() {
                 </div>
                 <button 
                   onClick={() => handleToggle("sos_enabled")}
+                  role="switch"
+                  aria-checked={prefs.sos_enabled}
+                  aria-label="SOS Broadcasts"
                   className={`w-11 h-6 rounded-full transition duration-200 relative shrink-0 ${
                     prefs.sos_enabled ? "bg-rose-500" : "bg-slate-200"
                   }`}
@@ -218,6 +224,9 @@ export default function Settings() {
                 </div>
                 <button 
                   onClick={() => handleToggle("appointment_reminders_enabled")}
+                  role="switch"
+                  aria-checked={prefs.appointment_reminders_enabled}
+                  aria-label="Appointment Reminders"
                   className={`w-11 h-6 rounded-full transition duration-200 relative shrink-0 ${
                     prefs.appointment_reminders_enabled ? "bg-rose-500" : "bg-slate-200"
                   }`}
@@ -241,6 +250,9 @@ export default function Settings() {
                 </div>
                 <button 
                   onClick={() => handleToggle("report_notifications_enabled")}
+                  role="switch"
+                  aria-checked={prefs.report_notifications_enabled}
+                  aria-label="Report Notifications"
                   className={`w-11 h-6 rounded-full transition duration-200 relative shrink-0 ${
                     prefs.report_notifications_enabled ? "bg-rose-500" : "bg-slate-200"
                   }`}
@@ -264,6 +276,9 @@ export default function Settings() {
                 </div>
                 <button 
                   onClick={() => handleToggle("push_notifications_enabled")}
+                  role="switch"
+                  aria-checked={prefs.push_notifications_enabled}
+                  aria-label="Master Push Status"
                   className={`w-11 h-6 rounded-full transition duration-200 relative shrink-0 ${
                     prefs.push_notifications_enabled ? "bg-rose-500" : "bg-slate-200"
                   }`}
@@ -311,12 +326,14 @@ export default function Settings() {
                         type="text" 
                         readOnly 
                         value={`${fcmStatus.token.substring(0, 16)}...`}
+                        aria-label="FCM Token Preview"
                         className="bg-transparent border-none text-[11px] text-slate-600 font-mono focus:outline-none flex-grow"
                       />
                       <button
                         onClick={copyToClipboard}
                         className="p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded transition"
                         title="Copy full token"
+                        aria-label="Copy full token"
                       >
                         {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>

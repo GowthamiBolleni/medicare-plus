@@ -146,7 +146,9 @@ export default function AIAssistant() {
 
       {/* Input row */}
       <form onSubmit={handleSendMessage} className="flex gap-3 shrink-0">
+        <label htmlFor="ai-chat-text" className="sr-only">Type message to clinical assistant</label>
         <input
+          id="ai-chat-text"
           type="text"
           placeholder="Ask me anything: 'I have headache and fever', 'What is my medicine schedule?'"
           value={inputText}
@@ -155,6 +157,7 @@ export default function AIAssistant() {
         />
         <button
           type="submit"
+          aria-label="Send message"
           className="bg-brand-600 hover:bg-brand-700 text-white font-bold p-4 rounded-2xl shadow-md smooth-hover flex items-center justify-center"
         >
           <Send className="w-5 h-5" />

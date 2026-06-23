@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Users, Plus, ShieldCheck, HeartPulse, Heart, Trash2, X, Pencil } from "lucide-react";
 import { familyAPI } from "../api";
 const getRelationEmoji = (relation) => {
@@ -39,6 +39,103 @@ export default function Family() {
       setLoading(false);
     }
   };
+
+  const addModalRef = useRef(null);
+  const editModalRef = useRef(null);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const modalElement = addModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowModal(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showModal]);
+
+  useEffect(() => {
+    if (!editingMember) return;
+    const modalElement = editModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setEditingMember(null);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [editingMember]);
 
   useEffect(() => {
     loadMembers();
@@ -135,17 +232,19 @@ export default function Family() {
                 <div className="absolute top-0 right-0 flex items-center gap-1">
                   <button
                     onClick={() => setEditingMember(member)}
-                    className="p-1 text-slate-300 hover:text-brand-600 rounded-lg hover:bg-slate-50 transition-colors"
+                    className="p-1 text-slate-300 hover:text-brand-600 rounded-lg hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
                     title="Edit Profile"
+                    aria-label="Edit Profile"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-4 h-4" aria-hidden="true" />
                   </button>
                   <button
                     onClick={() => handleUnlinkMember(member.id)}
-                    className="p-1 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    className="p-1 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
                     title="Unlink Account"
+                    aria-label="Unlink Account"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
 
@@ -198,21 +297,31 @@ export default function Family() {
 
       {/* Link Account Modal Panel */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={addModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-member-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Link Family Profile</h3>
+            <h3 id="add-member-title" className="text-lg font-bold text-slate-800 font-sans mb-5">Link Family Profile</h3>
 
             <form onSubmit={handleLinkAccount} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Family Member Name</label>
+                <label htmlFor="add-member-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Family Member Name</label>
                 <input
+                  id="add-member-name"
                   type="text"
-                  placeholder="e.g., Ramesh Kumar"
+                  placeholder="e.g. Gowthami Bolleni"
                   value={newMember.name}
                   onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -221,25 +330,26 @@ export default function Family() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Relation</label>
+                  <label htmlFor="add-member-relation" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Relation</label>
                   <select
+                    id="add-member-relation"
                     value={newMember.relation}
                     onChange={(e) => setNewMember({ ...newMember, relation: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
                   >
                     <option value="Spouse">Spouse</option>
-                    <option value="Daughter">Daughter</option>
-                    <option value="Son">Son</option>
-                    <option value="Father">Father</option>
-                    <option value="Mother">Mother</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
                     <option value="Sibling">Sibling</option>
+                    <option value="Grandparent">Grandparent</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age (Years)</label>
+                  <label htmlFor="add-member-age" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age (Years)</label>
                   <input
+                    id="add-member-age"
                     type="number"
-                    placeholder="e.g., 34"
                     value={newMember.age}
                     onChange={(e) => setNewMember({ ...newMember, age: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -247,29 +357,32 @@ export default function Family() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Est. Health Score (%)</label>
-                <input
-                  type="number"
-                  placeholder="e.g., 95"
-                  value={newMember.health_score}
-                  onChange={(e) => setNewMember({ ...newMember, health_score: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="add-member-health" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Est. Health Score (%)</label>
+                  <input
+                    id="add-member-health"
+                    type="number"
+                    placeholder="e.g. 85"
+                    value={newMember.health_score}
+                    onChange={(e) => setNewMember({ ...newMember, health_score: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="add-member-phone" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Phone Number</label>
+                  <input
+                    id="add-member-phone"
+                    type="tel"
+                    placeholder="e.g. +91 9876543210"
+                    value={newMember.phone}
+                    onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Phone Number</label>
-                <input
-                  type="text"
-                  placeholder="Phone Number"
-                  value={newMember.phone}
-                  onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-50">
                 <input
                   type="checkbox"
                   id="is_emergency_contact"
@@ -295,21 +408,31 @@ export default function Family() {
 
       {/* Edit Account Modal Panel */}
       {editingMember && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={editModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-member-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setEditingMember(null)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-650 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Family Profile</h3>
+            <h3 id="edit-member-title" className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Family Profile</h3>
 
             <form onSubmit={handleUpdateMember} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Family Member Name</label>
+                <label htmlFor="edit-member-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Family Member Name</label>
                 <input
+                  id="edit-member-name"
                   type="text"
-                  placeholder="e.g., Ramesh Kumar"
+                  placeholder="e.g. Gowthami Bolleni"
                   value={editingMember.name || ""}
                   onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -318,25 +441,26 @@ export default function Family() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Relation</label>
+                  <label htmlFor="edit-member-relation" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Relation</label>
                   <select
+                    id="edit-member-relation"
                     value={editingMember.relation || "Spouse"}
                     onChange={(e) => setEditingMember({ ...editingMember, relation: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
                   >
                     <option value="Spouse">Spouse</option>
-                    <option value="Daughter">Daughter</option>
-                    <option value="Son">Son</option>
-                    <option value="Father">Father</option>
-                    <option value="Mother">Mother</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
                     <option value="Sibling">Sibling</option>
+                    <option value="Grandparent">Grandparent</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age (Years)</label>
+                  <label htmlFor="edit-member-age" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Age (Years)</label>
                   <input
+                    id="edit-member-age"
                     type="number"
-                    placeholder="e.g., 34"
                     value={editingMember.age || ""}
                     onChange={(e) => setEditingMember({ ...editingMember, age: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -344,29 +468,32 @@ export default function Family() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Est. Health Score (%)</label>
-                <input
-                  type="number"
-                  placeholder="e.g., 95"
-                  value={editingMember.health_score || ""}
-                  onChange={(e) => setEditingMember({ ...editingMember, health_score: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="edit-member-health" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Est. Health Score (%)</label>
+                  <input
+                    id="edit-member-health"
+                    type="number"
+                    placeholder="e.g. 85"
+                    value={editingMember.health_score || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, health_score: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="edit-member-phone" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Phone Number</label>
+                  <input
+                    id="edit-member-phone"
+                    type="tel"
+                    placeholder="e.g. +91 9876543210"
+                    value={editingMember.phone || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Phone Number</label>
-                <input
-                  type="text"
-                  placeholder="Phone Number"
-                  value={editingMember.phone || ""}
-                  onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-50">
                 <input
                   type="checkbox"
                   id="edit_is_emergency_contact"

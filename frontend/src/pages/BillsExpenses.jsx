@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Receipt, Plus, Upload, FileText, CheckCircle, TrendingUp, X, Loader2 } from "lucide-react";
 import { Bar } from "react-chartjs-2";
 import {
@@ -82,6 +82,103 @@ export default function BillsExpenses() {
   useEffect(() => {
     loadExpenses();
   }, []);
+
+  const uploaderModalRef = useRef(null);
+  const ocrModalRef = useRef(null);
+
+  useEffect(() => {
+    if (!showUploader) return;
+    const modalElement = uploaderModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        handleClose();
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showUploader]);
+
+  useEffect(() => {
+    if (!selectedOcrReview) return;
+    const modalElement = ocrModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setSelectedOcrReview(null);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [selectedOcrReview]);
 
   const handleOcrUpload = async (file) => {
     if (!file) return;
@@ -491,12 +588,21 @@ export default function BillsExpenses() {
 
       {/* Bill Upload Modal Overlay */}
       {showUploader && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={uploaderModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="uploader-modal-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-4xl p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={handleClose}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close upload dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
             {/* Tab Header Selector */}
             <div className="flex border-b border-slate-100 mb-6 max-w-md mx-auto">
@@ -548,11 +654,12 @@ export default function BillsExpenses() {
             {isManual ? (
               // Manual Mode: Single column clean form
               <div className="max-w-md mx-auto py-4">
-                <h3 className="text-lg font-bold text-slate-800 font-sans mb-6 text-center">Log Expense Manually</h3>
+                <h3 id="uploader-modal-title" className="text-lg font-bold text-slate-800 font-sans mb-6 text-center">Log Expense Manually</h3>
                 <form onSubmit={handleCreateExpense} className="space-y-4 font-sans text-sm">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Hospital / Vendor</label>
+                    <label htmlFor="vendor-hospital" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Hospital / Vendor</label>
                     <input
+                      id="vendor-hospital"
                       type="text"
                       placeholder="e.g. Apollo Hospital"
                       value={newExp.hospital}
@@ -564,8 +671,9 @@ export default function BillsExpenses() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Amount (₹)</label>
+                      <label htmlFor="vendor-amount" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Amount (₹)</label>
                       <input
+                        id="vendor-amount"
                         type="number"
                         placeholder="e.g. 1500"
                         value={newExp.amount}
@@ -575,8 +683,9 @@ export default function BillsExpenses() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Date</label>
+                      <label htmlFor="vendor-date" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Date</label>
                       <input
+                        id="vendor-date"
                         type="date"
                         value={newExp.date}
                         onChange={(e) => setNewExp({ ...newExp, date: e.target.value })}
@@ -588,8 +697,9 @@ export default function BillsExpenses() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Service Description</label>
+                    <label htmlFor="vendor-description" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Service Description</label>
                     <input
+                      id="vendor-description"
                       type="text"
                       placeholder="e.g. Consultation"
                       value={newExp.description}
@@ -619,7 +729,7 @@ export default function BillsExpenses() {
             ) : (
               // OCR Mode: 2-column layout
               <div>
-                <h3 className="text-lg font-bold text-slate-800 font-sans mb-6">Scan & Verify Bill</h3>
+                <h3 id="uploader-modal-title" className="text-lg font-bold text-slate-800 font-sans mb-6">Scan & Verify Bill</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Left Column: File selection or preview */}
                   <div className="space-y-4">
@@ -804,8 +914,9 @@ export default function BillsExpenses() {
                         {showReview && (
                           <>
                             <div>
-                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Hospital / Vendor</label>
+                              <label htmlFor="ocr-hospital" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Hospital / Vendor</label>
                               <input
+                                id="ocr-hospital"
                                 type="text"
                                 placeholder="e.g. Apollo Hospital"
                                 value={newExp.hospital}
@@ -817,8 +928,9 @@ export default function BillsExpenses() {
 
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Amount (₹)</label>
+                                <label htmlFor="ocr-amount" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Amount (₹)</label>
                                 <input
+                                  id="ocr-amount"
                                   type="number"
                                   placeholder="e.g. 1500"
                                   value={newExp.amount}
@@ -828,8 +940,9 @@ export default function BillsExpenses() {
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Date</label>
+                                <label htmlFor="ocr-date" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Date</label>
                                 <input
+                                  id="ocr-date"
                                   type="date"
                                   value={newExp.date}
                                   onChange={(e) => setNewExp({ ...newExp, date: e.target.value })}
@@ -841,8 +954,9 @@ export default function BillsExpenses() {
                             </div>
 
                             <div>
-                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Service Description</label>
+                              <label htmlFor="ocr-description" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Service Description</label>
                               <input
+                                id="ocr-description"
                                 type="text"
                                 placeholder="e.g. Lab Consultation"
                                 value={newExp.description}
@@ -881,13 +995,22 @@ export default function BillsExpenses() {
 
       {/* View OCR Details Modal Overlay */}
       {selectedOcrReview && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={ocrModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ocr-modal-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setSelectedOcrReview(null)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-4">OCR Metadata Analysis</h3>
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-650 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close details dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
+            <h3 id="ocr-modal-title" className="text-lg font-bold text-slate-800 font-sans mb-4">OCR Metadata Analysis</h3>
             
             <div className="space-y-4 font-sans text-sm">
               <div className="bg-slate-50 p-4 rounded-xl space-y-2">

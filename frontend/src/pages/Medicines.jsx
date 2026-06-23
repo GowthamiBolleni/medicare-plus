@@ -43,6 +43,103 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
 
 
+  const addModalRef = useRef(null);
+  const editModalRef = useRef(null);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const modalElement = addModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowModal(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showModal]);
+
+  useEffect(() => {
+    if (!editingMed) return;
+    const modalElement = editModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setEditingMed(null);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [editingMed]);
+
   useEffect(() => {
     loadMedicines();
   }, []);
@@ -277,17 +374,19 @@ export default function Medicines({ profile, onProfileUpdate }) {
                 <div className="flex gap-1">
                   <button
                     onClick={() => setEditingMed(med)}
-                    className="p-1.5 text-slate-300 hover:text-brand-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    className="p-1.5 text-slate-300 hover:text-brand-500 rounded-lg hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
                     title="Edit Medicine"
+                    aria-label="Edit Medicine"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-4 h-4" aria-hidden="true" />
                   </button>
                   <button
                     onClick={() => handleDeleteMedicine(med.id)}
-                    className="p-1.5 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors"
+                    className="p-1.5 text-slate-300 hover:text-emergency-500 rounded-lg hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
                     title="Remove Medicine"
+                    aria-label="Remove Medicine"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -298,19 +397,29 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
       {/* Add Medicine Modal Panel */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={addModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-med-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Add New Prescription</h3>
+            <h3 id="add-med-title" className="text-lg font-bold text-slate-800 font-sans mb-5">Add New Prescription</h3>
 
             <form onSubmit={handleAddMedicine} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Medicine Name</label>
+                <label htmlFor="add-med-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Medicine Name</label>
                 <input
+                  id="add-med-name"
                   type="text"
                   placeholder="e.g., Paracetamol 500mg"
                   value={newMed.name}
@@ -321,8 +430,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Dosage</label>
+                  <label htmlFor="add-med-dosage" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Dosage</label>
                   <input
+                    id="add-med-dosage"
                     type="text"
                     value={newMed.dosage}
                     onChange={(e) => setNewMed({ ...newMed, dosage: e.target.value })}
@@ -330,8 +440,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Category</label>
+                  <label htmlFor="add-med-category" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Category</label>
                   <select
+                    id="add-med-category"
                     value={newMed.category}
                     onChange={(e) => setNewMed({ ...newMed, category: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -346,8 +457,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Time Schedule</label>
+                  <label htmlFor="add-med-time" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Time Schedule</label>
                   <input
+                    id="add-med-time"
                     type="time"
                     value={newMed.time}
                     onChange={(e) => setNewMed({ ...newMed, time: e.target.value })}
@@ -355,8 +467,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Instructions</label>
+                  <label htmlFor="add-med-instructions" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Instructions</label>
                   <select
+                    id="add-med-instructions"
                     value={newMed.instructions}
                     onChange={(e) => setNewMed({ ...newMed, instructions: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -369,8 +482,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
+                <label htmlFor="add-med-frequency" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
                 <select
+                  id="add-med-frequency"
                   value={newMed.frequency}
                   onChange={(e) => setNewMed({ ...newMed, frequency: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -402,19 +516,29 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
       {/* Edit Medicine Modal Panel */}
       {editingMed && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={editModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-med-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setEditingMed(null)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Medication Schedule</h3>
+            <h3 id="edit-med-title" className="text-lg font-bold text-slate-800 font-sans mb-5">Edit Medication Schedule</h3>
 
             <form onSubmit={handleEditMedicine} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Medicine Name</label>
+                <label htmlFor="edit-med-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Medicine Name</label>
                 <input
+                  id="edit-med-name"
                   type="text"
                   placeholder="e.g., Paracetamol 500mg"
                   value={editingMed.name}
@@ -425,8 +549,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Dosage</label>
+                  <label htmlFor="edit-med-dosage" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Dosage</label>
                   <input
+                    id="edit-med-dosage"
                     type="text"
                     value={editingMed.dosage}
                     onChange={(e) => setEditingMed({ ...editingMed, dosage: e.target.value })}
@@ -434,8 +559,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Category</label>
+                  <label htmlFor="edit-med-category" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Category</label>
                   <select
+                    id="edit-med-category"
                     value={editingMed.category}
                     onChange={(e) => setEditingMed({ ...editingMed, category: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -450,8 +576,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Time Schedule</label>
+                  <label htmlFor="edit-med-time" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Time Schedule</label>
                   <input
+                    id="edit-med-time"
                     type="time"
                     value={editingMed.time}
                     onChange={(e) => setEditingMed({ ...editingMed, time: e.target.value })}
@@ -459,8 +586,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Instructions</label>
+                  <label htmlFor="edit-med-instructions" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Instructions</label>
                   <select
+                    id="edit-med-instructions"
                     value={editingMed.instructions}
                     onChange={(e) => setEditingMed({ ...editingMed, instructions: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"
@@ -473,8 +601,9 @@ export default function Medicines({ profile, onProfileUpdate }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
+                <label htmlFor="edit-med-frequency" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frequency Schedule</label>
                 <select
+                  id="edit-med-frequency"
                   value={editingMed.frequency}
                   onChange={(e) => setEditingMed({ ...editingMed, frequency: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-medium"

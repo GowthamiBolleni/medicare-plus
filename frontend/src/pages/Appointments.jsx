@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Calendar, Clock, MapPin, Plus, Trash2, ShieldAlert, Award, X, Sparkles, Pencil } from "lucide-react";
 import { appointmentsAPI } from "../api";
 
@@ -38,6 +38,103 @@ export default function Appointments() {
       setLoading(false);
     }
   };
+
+  const bookModalRef = useRef(null);
+  const editModalRef = useRef(null);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const modalElement = bookModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowModal(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [showModal]);
+
+  useEffect(() => {
+    if (!editingAppt) return;
+    const modalElement = editModalRef.current;
+    if (!modalElement) return;
+
+    const previousActiveElement = document.activeElement;
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
+    
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setEditingAppt(null);
+        return;
+      }
+      if (e.key === "Tab") {
+        const els = modalElement.querySelectorAll(focusableSelectors);
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, [editingAppt]);
 
   useEffect(() => {
     loadAppointments();
@@ -219,11 +316,12 @@ export default function Appointments() {
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {appt.hospital}
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl border border-slate-100 overflow-hidden shrink-0">
+                  <div className="w-12 h-12 rounded-xl border border-slate-100 overflow-hidden shrink-0" aria-hidden="true">
                     <img
                       src={`https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=100&h=100&fit=crop`}
-                      alt="Doctor profile"
+                      alt=""
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                   </div>
                 </div>
@@ -266,17 +364,19 @@ export default function Appointments() {
                       date: formattedDate
                     });
                   }}
-                  className="bg-slate-50 hover:bg-brand-50 hover:text-brand-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200"
+                  className="bg-slate-50 hover:bg-brand-50 hover:text-brand-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   title="Edit Appointment"
+                  aria-label="Edit Appointment"
                 >
-                  <Pencil className="w-4 h-4" />
+                  <Pencil className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <button
                   onClick={() => handleCancelAppointment(appt.id)}
-                  className="bg-slate-50 hover:bg-emergency-50 hover:text-emergency-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200"
+                  className="bg-slate-50 hover:bg-emergency-50 hover:text-emergency-600 text-slate-400 p-2.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   title="Cancel Appointment"
+                  aria-label="Cancel Appointment"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -286,21 +386,31 @@ export default function Appointments() {
 
       {/* Book Appointment Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={bookModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="book-modal-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-brand-500" /> Schedule Clinical Session
+            <h3 id="book-modal-title" className="text-lg font-bold text-slate-800 font-sans mb-5 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-brand-500" aria-hidden="true" /> Schedule Clinical Session
             </h3>
 
             <form onSubmit={handleBookAppointment} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Select Doctor</label>
+                <label htmlFor="new-appt-doctor" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Select Doctor</label>
                 <select
+                  id="new-appt-doctor"
                   value={newAppt.doctor}
                   onChange={(e) => {
                     const doc = doctorsList.find((d) => d.name === e.target.value);
@@ -323,8 +433,9 @@ export default function Appointments() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Date</label>
+                  <label htmlFor="new-appt-date" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Date</label>
                   <input
+                    id="new-appt-date"
                     type="date"
                     value={newAppt.date}
                     onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value })}
@@ -333,8 +444,9 @@ export default function Appointments() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Time</label>
+                  <label htmlFor="new-appt-time" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Time</label>
                   <input
+                    id="new-appt-time"
                     type="time"
                     value={newAppt.time}
                     onChange={(e) => setNewAppt({ ...newAppt, time: e.target.value })}
@@ -345,8 +457,9 @@ export default function Appointments() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Reason for Visit</label>
+                <label htmlFor="new-appt-description" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Reason for Visit</label>
                 <textarea
+                  id="new-appt-description"
                   placeholder="Describe your symptoms or objectives..."
                   value={newAppt.description}
                   onChange={(e) => setNewAppt({ ...newAppt, description: e.target.value })}
@@ -371,21 +484,31 @@ export default function Appointments() {
 
       {/* Edit Appointment Modal */}
       {editingAppt && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          ref={editModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-modal-title"
+        >
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-slide-up relative">
-            <X
+            <button
               onClick={() => setEditingAppt(null)}
-              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover w-5 h-5"
-            />
+              className="absolute top-4 right-4 cursor-pointer text-slate-400 hover:text-slate-600 smooth-hover p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
 
-            <h3 className="text-lg font-bold text-slate-800 font-sans mb-5 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-brand-500" /> Edit Clinical Session
+            <h3 id="edit-modal-title" className="text-lg font-bold text-slate-800 font-sans mb-5 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-brand-500" aria-hidden="true" /> Edit Clinical Session
             </h3>
 
             <form onSubmit={handleEditAppointment} className="space-y-4 font-sans text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Select Doctor</label>
+                <label htmlFor="edit-appt-doctor" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Select Doctor</label>
                 <select
+                  id="edit-appt-doctor"
                   value={editingAppt.doctor}
                   onChange={(e) => {
                     const doc = doctorsList.find((d) => d.name === e.target.value);
@@ -408,8 +531,9 @@ export default function Appointments() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Date</label>
+                  <label htmlFor="edit-appt-date" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Date</label>
                   <input
+                    id="edit-appt-date"
                     type="date"
                     value={editingAppt.date}
                     onChange={(e) => setEditingAppt({ ...editingAppt, date: e.target.value })}
@@ -418,8 +542,9 @@ export default function Appointments() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Time</label>
+                  <label htmlFor="edit-appt-time" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Consultation Time</label>
                   <input
+                    id="edit-appt-time"
                     type="time"
                     value={editingAppt.time}
                     onChange={(e) => setEditingAppt({ ...editingAppt, time: e.target.value })}
@@ -430,8 +555,9 @@ export default function Appointments() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Reason for Visit</label>
+                <label htmlFor="edit-appt-description" className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1.5">Reason for Visit</label>
                 <textarea
+                  id="edit-appt-description"
                   placeholder="Describe your symptoms or objectives..."
                   value={editingAppt.description || ""}
                   onChange={(e) => setEditingAppt({ ...editingAppt, description: e.target.value })}

@@ -127,7 +127,7 @@ export default function Login({ onLoginSuccess }) {
 
           {/* Username Input */}
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+            <label htmlFor="username" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
               Username
             </label>
             <div className="relative">
@@ -135,6 +135,7 @@ export default function Login({ onLoginSuccess }) {
                 <User className="w-4 h-4" />
               </span>
               <input
+                id="username"
                 type="text"
                 placeholder="e.g. testuser1"
                 value={username}
@@ -149,7 +150,7 @@ export default function Login({ onLoginSuccess }) {
             <>
               {/* Email Field */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                <label htmlFor="email" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
                   Email Address
                 </label>
                 <div className="relative">
@@ -157,6 +158,7 @@ export default function Login({ onLoginSuccess }) {
                     <Mail className="w-4 h-4" />
                   </span>
                   <input
+                    id="email"
                     type="email"
                     placeholder="e.g. name@example.com"
                     value={email}
@@ -168,10 +170,11 @@ export default function Login({ onLoginSuccess }) {
 
               {/* Gender Dropdown */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                <label htmlFor="gender" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
                   Gender
                 </label>
                 <select
+                  id="gender"
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-semibold text-sm transition-all"
@@ -187,7 +190,7 @@ export default function Login({ onLoginSuccess }) {
 
           {/* Password Input */}
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+            <label htmlFor="password" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
               Password
             </label>
             <div className="relative">
@@ -195,6 +198,7 @@ export default function Login({ onLoginSuccess }) {
                 <Lock className="w-4 h-4" />
               </span>
               <input
+                id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={password}
@@ -204,6 +208,7 @@ export default function Login({ onLoginSuccess }) {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -214,7 +219,7 @@ export default function Login({ onLoginSuccess }) {
           {/* Confirm Password Field for Sign Up */}
           {isSignUp && (
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+              <label htmlFor="confirmPassword" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
                 Confirm Password
               </label>
               <div className="relative">
@@ -222,6 +227,7 @@ export default function Login({ onLoginSuccess }) {
                   <Lock className="w-4 h-4" />
                 </span>
                 <input
+                  id="confirmPassword"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={confirmPassword}
@@ -235,8 +241,9 @@ export default function Login({ onLoginSuccess }) {
           {/* Forgot Password Link (Login Only) */}
           {!isSignUp && (
             <div className="flex items-center justify-between text-xs font-bold pt-1">
-              <label className="flex items-center gap-2 text-slate-500 cursor-pointer select-none">
+              <label htmlFor="rememberMe" className="flex items-center gap-2 text-slate-500 cursor-pointer select-none">
                 <input
+                  id="rememberMe"
                   type="checkbox"
                   defaultChecked
                   className="rounded border-slate-200 text-brand-600 focus:ring-brand-500 w-3.5 h-3.5"

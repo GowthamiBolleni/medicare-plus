@@ -1,4 +1,15 @@
 @import "tailwindcss";
+@import "@fontsource/outfit/300.css";
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+@import "@fontsource/outfit/800.css";
+@import "@fontsource/inter/300.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 
 @theme {
   --color-brand-50: #f4f6fe;
@@ -111,3 +122,10 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite linear;
 }
+
+/* Global focus-visible outlines for keyboard accessibility */
+*:focus-visible {
+  outline: 3px solid var(--color-brand-500, #6d7ef2) !important;
+  outline-offset: 3px !important;
+}
+
