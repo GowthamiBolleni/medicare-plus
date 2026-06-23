@@ -1678,6 +1678,11 @@ def download_bill(
 
 @app.post("/api/expenses", response_model=schemas.ExpenseResponse)
 def log_expense(expense: schemas.ExpenseCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if expense.amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Amount must be positive."
+        )
     db_expense = models.Expense(
         hospital=expense.hospital,
         description=expense.description,
@@ -1763,6 +1768,11 @@ async def upload_bill(
     filepath = os.path.join(UPLOAD_DIR, filename)
 
     contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="File is empty."
+        )
     with open(filepath, "wb") as f:
         f.write(contents)
 
@@ -2109,6 +2119,11 @@ def delete_expense(expense_id: int, current_user: models.User = Depends(auth.get
 
 @app.put("/api/expenses/{expense_id}", response_model=schemas.ExpenseResponse)
 def update_expense(expense_id: int, expense_update: schemas.ExpenseCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if expense_update.amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Amount must be positive."
+        )
     db_expense = db.query(models.Expense).filter(
         models.Expense.id == expense_id,
         models.Expense.user_id == current_user.id
@@ -3333,6 +3348,11 @@ async def upload_report(
     # Enforce maximum size limit of 10 MB
     MAX_FILE_SIZE = 10 * 1024 * 1024 # 10 MB
     contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="File is empty."
+        )
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
