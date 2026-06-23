@@ -334,20 +334,58 @@ export const familyAPI = {
 };
 
 export const notificationsAPI = {
-  getAll: async () => {
+  // Legacy fallback methods (mapped to /api/notifications for backwards compatibility)
+  getAllLegacy: async () => {
     const response = await apiClient.get("/notifications");
     return response.data;
   },
-  create: async (data) => {
+  createLegacy: async (data) => {
     const response = await apiClient.post("/notifications", data);
     return response.data;
   },
-  markRead: async (id) => {
+  markReadLegacy: async (id) => {
     const response = await apiClient.put(`/notifications/${id}`);
     return response.data;
   },
-  delete: async (id) => {
+  deleteLegacy: async (id) => {
     const response = await apiClient.delete(`/notifications/${id}`);
+    return response.data;
+  },
+
+  // Upgraded Notification History endpoints
+  getAll: async (type = null, read = null) => {
+    const params = {};
+    if (type) params.type = type;
+    if (read !== null) params.read = read;
+    const response = await apiClient.get("/notifications/history", { params });
+    return response.data;
+  },
+  markRead: async (id) => {
+    const response = await apiClient.put(`/notifications/history/${id}/read`);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await apiClient.delete(`/notifications/history/${id}`);
+    return response.data;
+  },
+  clearAll: async () => {
+    const response = await apiClient.delete("/notifications/history/clear-all");
+    return response.data;
+  },
+  
+  // Preferences endpoints
+  getPreferences: async () => {
+    const response = await apiClient.get("/notifications/preferences");
+    return response.data;
+  },
+  updatePreferences: async (prefs) => {
+    const response = await apiClient.put("/notifications/preferences", prefs);
+    return response.data;
+  },
+
+  // Test push notification endpoint
+  sendTest: async () => {
+    const response = await apiClient.post("/notifications/test");
     return response.data;
   }
 };

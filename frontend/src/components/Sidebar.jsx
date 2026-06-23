@@ -12,7 +12,9 @@ import {
   Users,
   MessageSquare,
   AlertOctagon,
-  ChevronRight
+  ChevronRight,
+  Bell,
+  Settings
 } from "lucide-react";
 
 export default function Sidebar({ profile }) {
@@ -28,6 +30,8 @@ export default function Sidebar({ profile }) {
     { name: "Medical Reports", path: "/reports", icon: FileText },
     { name: "Family", path: "/family", icon: Users },
     { name: "AI Assistant", path: "/ai-assistant", icon: MessageSquare },
+    { name: "Notifications", path: "/notifications", icon: Bell },
+    { name: "Settings", path: "/settings", icon: Settings },
     { name: "Emergency", path: "/emergency", icon: AlertOctagon, isEmergency: true },
   ];
 

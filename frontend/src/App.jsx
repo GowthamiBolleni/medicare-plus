@@ -28,6 +28,8 @@ import Emergency from "./pages/Emergency";
 import MedicalReports from "./pages/MedicalReports";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
+import Notifications from "./pages/Notifications";
+import Settings from "./pages/Settings";
 
 function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -76,6 +78,33 @@ function AppContent() {
   const handleProfileUpdate = (updatedProfile) => {
     setProfile(updatedProfile);
   };
+
+  // Service Worker Registration for PWA & Background Notifications
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .then((reg) => {
+            console.log('[App SW] Service Worker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.error('[App SW] Service Worker registration failed:', err);
+          });
+      });
+    }
+  }, []);
+
+  // PWA beforeinstallprompt catcher
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  useEffect(() => {
+    const handleInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('[App PWA] beforeinstallprompt event captured');
+    };
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+  }, []);
 
   // Background Reminder Checker to simulate SMS dispatches and send browser notifications
   useEffect(() => {
@@ -269,6 +298,8 @@ function AppContent() {
             <Route path="/ai-assistant" element={<AIAssistant />} />
             <Route path="/emergency" element={<Emergency />} />
             <Route path="/profile" element={<Profile onLogout={() => setIsAuthenticated(false)} onProfileUpdate={handleProfileUpdate} />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </div>

@@ -342,3 +342,51 @@ class DashboardSummary(BaseModel):
 class SOSRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+# Device Token schemas
+class DeviceTokenCreate(BaseModel):
+    device_token: str
+    device_name: Optional[str] = None
+
+class DeviceTokenResponse(BaseModel):
+    id: int
+    user_id: int
+    device_token: str
+    device_name: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# Notification History schemas
+class NotificationHistoryResponse(BaseModel):
+    id: int
+    user_id: int
+    title: str
+    message: str
+    type: str
+    read: bool
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# Notification Preferences schemas
+class NotificationPreferencesUpdate(BaseModel):
+    medicine_reminders_enabled: Optional[bool] = None
+    sos_enabled: Optional[bool] = None
+    appointment_reminders_enabled: Optional[bool] = None
+    report_notifications_enabled: Optional[bool] = None
+    push_notifications_enabled: Optional[bool] = None
+
+class NotificationPreferencesResponse(BaseModel):
+    id: int
+    user_id: int
+    medicine_reminders_enabled: bool
+    sos_enabled: bool
+    appointment_reminders_enabled: bool
+    report_notifications_enabled: bool
+    push_notifications_enabled: bool
+
+    class Config:
+        from_attributes = True

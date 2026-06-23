@@ -36,6 +36,9 @@ class User(Base):
     medical_reports = relationship("MedicalReport", back_populates="user", cascade="all, delete-orphan")
     analyses = relationship("ReportAnalysis", back_populates="user", cascade="all, delete-orphan")
     embeddings = relationship("ReportEmbedding", back_populates="user", cascade="all, delete-orphan")
+    device_tokens = relationship("DeviceToken", back_populates="user", cascade="all, delete-orphan")
+    notification_history_records = relationship("NotificationHistory", back_populates="user", cascade="all, delete-orphan")
+    notification_preferences = relationship("NotificationPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 class Medicine(Base):
     __tablename__ = "medicines"
@@ -253,3 +256,41 @@ class ReportEmbedding(Base):
 
     user = relationship("User", back_populates="embeddings")
     report = relationship("MedicalReport", back_populates="embeddings")
+
+class DeviceToken(Base):
+    __tablename__ = "device_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    device_token = Column(String, nullable=False, index=True)
+    device_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="device_tokens")
+
+class NotificationHistory(Base):
+    __tablename__ = "notification_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="notification_history_records")
+
+class NotificationPreferences(Base):
+    __tablename__ = "notification_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    medicine_reminders_enabled = Column(Boolean, default=True)
+    sos_enabled = Column(Boolean, default=True)
+    appointment_reminders_enabled = Column(Boolean, default=True)
+    report_notifications_enabled = Column(Boolean, default=True)
+    push_notifications_enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="notification_preferences", uselist=False)

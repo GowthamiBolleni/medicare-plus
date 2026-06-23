@@ -21,3 +21,4 @@ supabase==2.6.0
 sentence-transformers
 faiss-cpu
 reportlab
+firebase-admin
