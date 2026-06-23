@@ -1,12 +1,4 @@
-import axios from "axios";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-
-// Helper to construct authenticated API request headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("medicare_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+import apiClient from "../api/client";
 
 class NotificationService {
   constructor() {
@@ -49,13 +41,12 @@ class NotificationService {
 
   async registerToken(token) {
     try {
-      const response = await axios.post(
-        `${API_URL}/api/notifications/device-token`,
+      const response = await apiClient.post(
+        "/notifications/device-token",
         {
           device_token: token,
           device_name: navigator.userAgent.substring(0, 100)
-        },
-        { headers: getAuthHeaders() }
+        }
       );
       console.log("[NotificationService] Device token registered successfully:", response.data);
       return response.data;
@@ -67,10 +58,9 @@ class NotificationService {
 
   async sendTestNotification() {
     try {
-      const response = await axios.post(
-        `${API_URL}/api/notifications/test`,
-        {},
-        { headers: getAuthHeaders() }
+      const response = await apiClient.post(
+        "/notifications/test",
+        {}
       );
       console.log("[NotificationService] Test notification triggered:", response.data);
       return response.data;
