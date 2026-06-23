@@ -87,6 +87,17 @@ export const authAPI = {
     localStorage.removeItem("medicare_user_id");
     localStorage.removeItem("medicare_username");
     localStorage.removeItem("medicare_user_fullname");
+  },
+  forgotPassword: async (username, email, newPassword) => {
+    const response = await apiClient.post(
+      "/auth/forgot-password",
+      {
+        username,
+        email,
+        new_password: newPassword
+      }
+    );
+    return response.data;
   }
 };
 

@@ -692,6 +692,35 @@ def login(request: Request, login_data: schemas.LoginRequest, db: Session = Depe
         "token_type": "bearer"
     }
 
+@app.post("/api/auth/forgot-password")
+@limiter.limit("5/minute")
+def forgot_password(request: Request, reset_data: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(
+        models.User.username == reset_data.username
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Username not found")
+        
+    if user.email.lower().strip() != reset_data.email.lower().strip():
+        raise HTTPException(status_code=400, detail="Username and email address do not match our records")
+        
+    # Password policy validation
+    new_password = reset_data.new_password
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    if not any(c.isupper() for c in new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+        
+    hashed_pw = auth.get_password_hash(new_password)
+    user.hashed_password = hashed_pw
+    db.commit()
+    return {"message": "Password reset successfully. You can now login with your new password."}
+
 @app.get("/api/profile", response_model=schemas.UserResponse)
 def get_profile(current_user: models.User = Depends(auth.get_current_user)):
     return current_user

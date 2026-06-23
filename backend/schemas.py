@@ -46,6 +46,11 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True
 
+class PasswordResetRequest(BaseModel):
+    username: str
+    email: str
+    new_password: str
+
 # Medicine schemas
 class MedicineBase(BaseModel):
     name: str

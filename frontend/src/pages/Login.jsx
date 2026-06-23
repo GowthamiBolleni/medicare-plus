@@ -4,6 +4,7 @@ import { authAPI } from "../api";
 
 export default function Login({ onLoginSuccess }) {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   
   // Form Fields
   const [username, setUsername] = useState("");
@@ -20,6 +21,19 @@ export default function Login({ onLoginSuccess }) {
 
   const handleToggleMode = () => {
     setIsSignUp(!isSignUp);
+    setIsForgotPassword(false);
+    setError("");
+    setSuccessMsg("");
+    setUsername("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setGender("");
+  };
+
+  const handleToggleForgotPassword = () => {
+    setIsForgotPassword(!isForgotPassword);
+    setIsSignUp(false);
     setError("");
     setSuccessMsg("");
     setUsername("");
@@ -33,6 +47,33 @@ export default function Login({ onLoginSuccess }) {
     e.preventDefault();
     setError("");
     setSuccessMsg("");
+
+    if (isForgotPassword) {
+      if (!username || !email || !password || !confirmPassword) {
+        setError("Please fill in username, email and new password.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const res = await authAPI.forgotPassword(username, email, password);
+        setSuccessMsg(res.message || "Password reset successfully. Please sign in.");
+        setIsForgotPassword(false);
+        setPassword("");
+        setConfirmPassword("");
+      } catch (err) {
+        console.error("Forgot password failure", err);
+        const errMsg = err.response?.data?.detail || "Failed to reset password. Verify your username and email.";
+        setError(errMsg);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (!username || !password) {
       setError("Please fill in username and password.");
@@ -100,8 +141,8 @@ export default function Login({ onLoginSuccess }) {
             <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center justify-center gap-1.5 font-sans">
               MediCare<span className="text-brand-600 font-extrabold">+</span> <Sparkles className="w-4 h-4 text-amber-400 fill-current" />
             </h1>
-            <p className="text-slate-400 mt-1.5 text-xs font-semibold uppercase tracking-wider">
-              {isSignUp ? "Create new patient portal account" : "Health Portal & Reminders"}
+            <p className="text-slate-400 mt-1.5 text-xs font-semibold uppercase tracking-wider animate-fade-in">
+              {isSignUp ? "Create new patient portal account" : isForgotPassword ? "Account Recovery" : "Health Portal & Reminders"}
             </p>
           </div>
         </div>
@@ -126,7 +167,7 @@ export default function Login({ onLoginSuccess }) {
           )}
 
           {/* Username Input */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 animate-fade-in">
             <label htmlFor="username" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
               Username
             </label>
@@ -145,53 +186,52 @@ export default function Login({ onLoginSuccess }) {
             </div>
           </div>
 
-          {/* Registration Extra Fields */}
-          {isSignUp && (
-            <>
-              {/* Email Field */}
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                    <Mail className="w-4 h-4" />
-                  </span>
-                  <input
-                    id="email"
-                    type="email"
-                    placeholder="e.g. name@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-semibold text-sm transition-all placeholder:text-slate-400"
-                  />
-                </div>
+          {/* Email Field for Registration & Forgot Password */}
+          {(isSignUp || isForgotPassword) && (
+            <div className="space-y-1.5 animate-fade-in">
+              <label htmlFor="email" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                Email Address
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </span>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="e.g. name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-semibold text-sm transition-all placeholder:text-slate-400"
+                />
               </div>
+            </div>
+          )}
 
-              {/* Gender Dropdown */}
-              <div className="space-y-1.5">
-                <label htmlFor="gender" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-                  Gender
-                </label>
-                <select
-                  id="gender"
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-semibold text-sm transition-all"
-                >
-                  <option value="">Select Gender</option>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Non-Binary">Non-Binary</option>
-                </select>
-              </div>
-            </>
+          {/* Gender Dropdown (Registration Only) */}
+          {isSignUp && (
+            <div className="space-y-1.5 animate-fade-in">
+              <label htmlFor="gender" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                Gender
+              </label>
+              <select
+                id="gender"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 font-semibold text-sm transition-all"
+              >
+                <option value="">Select Gender</option>
+                <option value="Female">Female</option>
+                <option value="Male">Male</option>
+                <option value="Non-Binary">Non-Binary</option>
+              </select>
+            </div>
           )}
 
           {/* Password Input */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 animate-fade-in">
             <label htmlFor="password" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-              Password
+              {isForgotPassword ? "New Password" : "Password"}
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
@@ -216,11 +256,11 @@ export default function Login({ onLoginSuccess }) {
             </div>
           </div>
 
-          {/* Confirm Password Field for Sign Up */}
-          {isSignUp && (
-            <div className="space-y-1.5">
+          {/* Confirm Password Field for Sign Up & Forgot Password */}
+          {(isSignUp || isForgotPassword) && (
+            <div className="space-y-1.5 animate-fade-in">
               <label htmlFor="confirmPassword" className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-                Confirm Password
+                {isForgotPassword ? "Confirm New Password" : "Confirm Password"}
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
@@ -238,9 +278,9 @@ export default function Login({ onLoginSuccess }) {
             </div>
           )}
 
-          {/* Forgot Password Link (Login Only) */}
-          {!isSignUp && (
-            <div className="flex items-center justify-between text-xs font-bold pt-1">
+          {/* Remember me & Forgot Password Toggle button (Login Only) */}
+          {!isSignUp && !isForgotPassword && (
+            <div className="flex items-center justify-between text-xs font-bold pt-1 animate-fade-in">
               <label htmlFor="rememberMe" className="flex items-center gap-2 text-slate-500 cursor-pointer select-none">
                 <input
                   id="rememberMe"
@@ -250,9 +290,13 @@ export default function Login({ onLoginSuccess }) {
                 />
                 Remember me
               </label>
-              <a href="#forgot" className="text-brand-600 hover:underline">
+              <button 
+                type="button"
+                onClick={handleToggleForgotPassword}
+                className="text-brand-600 hover:underline cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-500 px-1.5 py-0.5 rounded"
+              >
                 Forgot Password?
-              </a>
+              </button>
             </div>
           )}
 
@@ -268,24 +312,28 @@ export default function Login({ onLoginSuccess }) {
               <>
                 <UserPlus className="w-4 h-4" /> Create Account
               </>
+            ) : isForgotPassword ? (
+              "Reset Password"
             ) : (
               "Access Portal"
             )}
           </button>
         </form>
 
-        {/* Toggle Sign Up Mode */}
+        {/* Toggle sign in / sign up / forgot password modes */}
         <div className="text-center">
           <button
             type="button"
-            onClick={handleToggleMode}
-            className="text-xs font-bold text-brand-600 hover:underline hover:text-brand-700 transition-colors"
+            onClick={isForgotPassword ? handleToggleForgotPassword : handleToggleMode}
+            className="text-xs font-bold text-brand-600 hover:underline hover:text-brand-700 transition-colors cursor-pointer"
           >
-            {isSignUp ? "Already have an account? Access Portal" : "New patient? Create Account"}
+            {isForgotPassword 
+              ? "Back to Access Portal" 
+              : isSignUp 
+                ? "Already have an account? Access Portal" 
+                : "New patient? Create Account"}
           </button>
         </div>
-
-
 
       </div>
     </div>
