@@ -46,10 +46,18 @@ def send_twilio_whatsapp(to_number: str, body: str):
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     from_number = os.getenv("TWILIO_FROM_NUMBER")
     
+    # Clean spaces from to_number and format it
+    to_clean = to_number.replace(" ", "")
+    if not to_clean.startswith("+"):
+        if len(to_clean) == 10:
+            to_clean = "+91" + to_clean
+        else:
+            to_clean = "+" + to_clean
+            
     # Mock fallback helper for test suites
-    if to_number == "+910000000000" or "fail_sandbox" in to_number:
+    if to_clean == "+910000000000" or "fail_sandbox" in to_clean:
         return "WhatsApp delivery unavailable. Contact has not joined Twilio Sandbox."
-    if to_number == "+919999988888" or "success_sandbox" in to_number:
+    if to_clean == "+919999988888" or "success_sandbox" in to_clean:
         print("[Twilio WhatsApp Mock] WhatsApp message sent successfully! SID: SMmock123")
         return True
     
@@ -65,16 +73,6 @@ def send_twilio_whatsapp(to_number: str, body: str):
         return False
         
     try:
-        # Clean spaces from to_number
-        to_clean = to_number.replace(" ", "")
-        
-        # If it doesn't start with +, let's add +91 or +
-        if not to_clean.startswith("+"):
-            if len(to_clean) == 10:
-                to_clean = "+91" + to_clean
-            else:
-                to_clean = "+" + to_clean
-
         if not account_sid.startswith("AC"):
             print("[Twilio WhatsApp] Invalid Twilio Account SID prefix. Skipping WhatsApp send.")
             return False
